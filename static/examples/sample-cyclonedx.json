@@ -1,0 +1,101 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "shop-backend",
+      "version": "3.2.0"
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "pkg:app/shop-backend@3.2.0",
+      "name": "shop-backend",
+      "version": "3.2.0",
+      "licenses": [ { "license": { "id": "GPL-2.0" } } ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/web-ui@1.4.2",
+      "name": "web-ui",
+      "version": "1.4.2",
+      "licenses": [ { "expression": "Apache-2.0" } ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/pdf-kit@2.0.1",
+      "name": "pdf-kit",
+      "version": "2.0.1",
+      "licenses": [
+        { "license": { "id": "MIT" } },
+        { "license": { "id": "Apache-2.0" } }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/codec-native@0.8.0",
+      "name": "codec-native",
+      "version": "0.8.0",
+      "licenses": [ { "license": { "name": "Proprietary" } } ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/chart-render@5.1.0",
+      "name": "chart-render",
+      "version": "5.1.0",
+      "licenses": [ { "license": { "id": "GPL-3.0" } } ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/legacy-util@1.0.0",
+      "name": "legacy-util",
+      "version": "1.0.0"
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:app/batch-worker@2.0.0",
+      "name": "batch-worker",
+      "version": "2.0.0",
+      "licenses": [ { "license": { "id": "GPL-2.0" } } ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/report-engine@1.1.0",
+      "name": "report-engine",
+      "version": "1.1.0",
+      "licenses": [ { "license": { "id": "Proprietary" } } ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:app/shop-backend@3.2.0",
+      "dependsOn": [
+        "pkg:npm/web-ui@1.4.2",
+        "pkg:npm/pdf-kit@2.0.1",
+        "pkg:pypi/codec-native@0.8.0"
+      ]
+    },
+    {
+      "ref": "pkg:app/batch-worker@2.0.0",
+      "dependsOn": [
+        "pkg:pypi/codec-native@0.8.0",
+        "pkg:npm/report-engine@1.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/web-ui@1.4.2",
+      "dependsOn": [
+        "pkg:npm/chart-render@5.1.0",
+        "pkg:maven/legacy-util@1.0.0",
+        "pkg:npm/theme-dark@9.9.9"
+      ]
+    },
+    {
+      "ref": "pkg:npm/pdf-kit@2.0.1",
+      "dependsOn": [ "pkg:maven/legacy-util@1.0.0" ]
+    }
+  ]
+}

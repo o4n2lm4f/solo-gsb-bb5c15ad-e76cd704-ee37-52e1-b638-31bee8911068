@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>许可证依赖冲突审计台</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --ink: #1f2933; --muted: #697586;
+    --line: #e4e9f0; --brand: #2b5cb8; --brand-dark: #1e4280;
+    --ok: #1a7f4b; --ok-bg: #e6f6ee;
+    --err: #c02b2b; --err-bg: #fdecec;
+    --warn: #9a6a00; --warn-bg: #fdf4dd;
+    --info: #2b5cb8; --info-bg: #eaf1fc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header.top {
+    background: linear-gradient(120deg, var(--brand-dark), var(--brand));
+    color: #fff; padding: 22px 28px;
+  }
+  header.top h1 { margin: 0; font-size: 22px; font-weight: 700; }
+  header.top p { margin: 6px 0 0; opacity: .85; font-size: 13px; }
+  header.top a { color: #fff; text-decoration: underline; margin-left: 14px; }
+  main { max-width: 1120px; margin: 24px auto; padding: 0 20px 60px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 20px; margin-bottom: 18px; }
+  .card h2 { margin: 0 0 14px; font-size: 16px; }
+  textarea {
+    width: 100%; min-height: 220px; border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    resize: vertical;
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  button {
+    border: 0; border-radius: 7px; padding: 9px 16px; font-size: 13px; cursor: pointer;
+    background: var(--brand); color: #fff; font-weight: 600;
+  }
+  button.secondary { background: #eef2f8; color: var(--brand-dark); border: 1px solid var(--line); }
+  button:disabled { opacity: .55; cursor: default; }
+  input[type=text] {
+    border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px; font-size: 13px;
+    min-width: 240px;
+  }
+  .hint { color: var(--muted); font-size: 12px; }
+  .alert { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; display: none; }
+  .alert.show { display: block; }
+  .alert.error { background: var(--err-bg); color: var(--err); border: 1px solid #f3c2c2; }
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat { flex: 1 1 120px; background: #f8fafc; border: 1px solid var(--line);
+          border-radius: 8px; padding: 12px 14px; }
+  .stat .num { font-size: 22px; font-weight: 700; }
+  .stat .label { color: var(--muted); font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .badge.conflict { background: var(--err-bg); color: var(--err); }
+  .badge.warning  { background: var(--warn-bg); color: var(--warn); }
+  .badge.clean    { background: var(--ok-bg); color: var(--ok); }
+  .badge.cat-permissive { background: var(--ok-bg); color: var(--ok); }
+  .badge.cat-weak-copyleft { background: #ecf7e6; color: #4a7d14; }
+  .badge.cat-strong-copyleft { background: var(--err-bg); color: var(--err); }
+  .badge.cat-proprietary { background: #f3ecfd; color: #6b32b8; }
+  .badge.cat-unknown { background: var(--warn-bg); color: var(--warn); }
+  .badge.cat-multi { background: var(--info-bg); color: var(--info); }
+  .cand-list { margin: 2px 0 0; padding: 0; list-style: none; display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  .cand-list .cand { font-size: 11px; padding: 0 7px; border-radius: 999px; background: #eef2f8; color: var(--brand-dark); font-weight: 600; }
+  .combos { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .combos summary { padding: 8px 12px; color: var(--brand); font-size: 12px; background: #f8fafc; }
+  .combos table { font-size: 12px; }
+  .combos th, .combos td { padding: 6px 10px; }
+  .combos .st-ok { color: var(--ok); font-weight: 700; }
+  .combos .st-conflict { color: var(--err); font-weight: 700; }
+  .combos .st-warning { color: var(--warn); font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  tr.hidden { display: none; }
+  .conflict { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px;
+              padding: 12px 16px; margin-bottom: 10px; background: #fcfdff; }
+  .conflict.error { border-left-color: var(--err); }
+  .conflict.warning { border-left-color: #d9a413; }
+  .conflict .head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .conflict .reason { color: var(--muted); margin: 6px 0 8px; }
+  .path { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+          background: #f4f7fb; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px;
+          overflow-x: auto; white-space: nowrap; }
+  .path b { color: var(--err); }
+  .path .arrow { color: var(--muted); padding: 0 4px; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .muted { color: var(--muted); }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--brand); font-size: 13px; }
+  .hidden-block { display: none; }
+  .pill { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #eef2f8; color: var(--muted); }
+  mark { background: #fff1a8; border-radius: 3px; padding: 0 2px; }
+  select {
+    border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px; font-size: 13px;
+    background: #fff; color: var(--ink); min-width: 300px; max-width: 100%;
+  }
+  select optgroup { font-weight: 600; }
+  .diff-add { color: var(--ok); font-weight: 700; }
+  .diff-remove { color: var(--err); font-weight: 700; }
+  .diff-change { color: var(--warn); font-weight: 700; }
+  .diff-arrow { color: var(--muted); padding: 0 6px; font-weight: 400; }
+  .path.base b { color: var(--err); }
+  .path.target b { color: var(--ok); }
+  .path-label { font-size: 11px; color: var(--muted); margin: 6px 0 2px; }
+  .path-label .tag {
+    font-size: 10px; padding: 0 6px; border-radius: 4px; margin-right: 6px; font-weight: 700;
+  }
+  .tag.base { background: var(--err-bg); color: var(--err); }
+  .tag.target { background: var(--ok-bg); color: var(--ok); }
+  .fields-changed { font-size: 12px; color: var(--muted); margin: 4px 0; }
+  .meta-line { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .node-lic-base, .node-lic-target { display: inline-block; }
+  .badge.review-ok { background: var(--ok-bg); color: var(--ok); }
+  .badge.review-pending { background: #eef2f8; color: var(--muted); }
+  .review-box {
+    margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 12px;
+  }
+  .review-box input[type=text] { min-width: 200px; flex: 1; padding: 6px 10px; font-size: 12px; }
+  .review-box input[type=datetime-local] {
+    border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px;
+    font-size: 12px; color: var(--ink); background: #fff;
+  }
+  .review-box button { padding: 6px 12px; font-size: 12px; }
+  .review-box .note { flex: 1 1 100%; }
+  .edgecut-box {
+    margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px;
+  }
+  .edgecut-box > .row { margin-top: 8px; }
+  .edgecut-box button { padding: 6px 12px; font-size: 12px; }
+  .path .cut-edge { color: var(--err); font-weight: 700; text-decoration: underline wavy var(--err); }
+  .cut-list { margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
+  .cut-edge-item {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    border: 1px solid var(--line); border-left: 3px solid var(--err);
+    border-radius: 6px; padding: 6px 10px; background: #fcf5f5;
+  }
+  .cut-edge-item.alternate { border-left-color: var(--brand); background: #f3f7fd; }
+  .cut-edge-item .mono { font-size: 12px; }
+  .edgecut-summary { font-size: 13px; margin: 8px 0 4px; }
+  .edgecut-witness { font-size: 12px; }
+  .badge.reach-no { background: var(--ok-bg); color: var(--ok); }
+  .badge.reach-yes { background: var(--err-bg); color: var(--err); }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>🛡️ 许可证依赖冲突审计台</h1>
+  <p>规范化依赖节点 · 支持 CycloneDX SBOM 导入 · 按许可证兼容矩阵计算传递约束 · 支持多许可证候选（OR）组合判定 · 标出冲突的最短依赖路径 · 支持按包筛选与 JSON 导出
+    <a href="/docs" target="_blank">API 文档</a><a href="/api/matrix" target="_blank">兼容矩阵</a>
+  </p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. 上传或粘贴 manifest / CycloneDX BOM</h2>
+    <div id="alert" class="alert"></div>
+    <textarea id="input" spellcheck="false" placeholder='{"name":"my-app","packages":[{"name":"app","version":"1.0","license":"GPL-3.0","dependencies":["lib@1.0"]}],"edges":[...]}  或直接粘贴 CycloneDX JSON（{"bomFormat":"CycloneDX","components":[...],"dependencies":[...]}）'></textarea>
+    <div class="row">
+      <button id="btn-audit">开始审计</button>
+      <label class="secondary" style="border:1px solid var(--line);border-radius:7px;padding:9px 16px;cursor:pointer;background:#eef2f8;color:var(--brand-dark);font-weight:600;font-size:13px;">
+        选择 JSON 文件
+        <input id="file" type="file" accept=".json,application/json" style="display:none">
+      </label>
+      <button class="secondary" id="btn-sample">载入示例</button>
+      <button class="secondary" id="btn-sample-cdx">载入 CycloneDX 示例</button>
+      <span class="hint">依赖边方向：使用方 → 被依赖方；支持 packages / dependencies / edges 混合声明，也可直接粘贴或上传 CycloneDX JSON（自动识别 bomFormat / components / dependencies，按 bom-ref 还原依赖图）。</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. 历史审计 · 两次对比 · 复现包核验</h2>
+    <div id="compare-alert" class="alert"></div>
+    <div class="row">
+      <select id="cmp-base"></select>
+      <span class="diff-arrow">⇄</span>
+      <select id="cmp-target"></select>
+      <button id="btn-compare">对比选中的两次审计</button>
+      <button class="secondary" id="btn-refresh-audits">刷新列表</button>
+    </div>
+    <div class="hint" style="margin-top:8px;">
+      对比为只读操作，不会创建新审计。节点按 <b>包名@版本</b> 配对，
+      许可证冲突/告警按「祖先节点 → 被依赖节点」配对，新增/消失/状态变化都会附上双方的最短依赖路径。
+    </div>
+    <div id="compare-result" class="hidden-block" style="margin-top:18px;"></div>
+
+    <div class="row" style="margin-top:16px;border-top:1px dashed var(--line);padding-top:14px;">
+      <select id="repro-audit"></select>
+      <button class="secondary" id="btn-repro-download">⬇ 下载复现包</button>
+      <label class="secondary" style="border:1px solid var(--line);border-radius:7px;padding:9px 16px;cursor:pointer;background:#eef2f8;color:var(--brand-dark);font-weight:600;font-size:13px;">
+        选择复现包文件
+        <input id="repro-file" type="file" accept=".json,application/json" style="display:none">
+      </label>
+      <button id="btn-repro-verify" disabled>上传核验</button>
+      <span class="hint" id="repro-file-name"></span>
+    </div>
+    <div id="repro-alert" class="alert" style="margin-top:10px;"></div>
+    <div class="hint" style="margin-top:8px;">
+      复现包（格式 <span class="mono">audit-repro/v1</span>）包含原始 manifest、保存的审计结果（未附着复核标记）
+      及两者的 SHA-256 摘要，可离线转交。核验为只读操作：按稳定键序列化重算两处摘要，
+      并用包内 manifest 重新调用分析器，剔除审计 ID、时间等运行元数据后逐项比对
+      节点、依赖边、冲突严重程度与最短路径——只有摘要与复算结果都一致才判通过，
+      否则指出首个不一致字段。核验不会创建审计或改动复核标记。
+    </div>
+    <div id="repro-result" class="hidden-block" style="margin-top:14px;"></div>
+  </section>
+
+  <section class="card">
+    <h2>3. 根包退役预演 <span class="pill">只读 · 不创建审计</span></h2>
+    <div id="retire-alert" class="alert"></div>
+    <div class="row">
+      <select id="retire-audit"></select>
+      <button class="secondary" id="btn-load-roots">加载根包</button>
+      <button id="btn-rehearse" disabled>预演退役</button>
+    </div>
+    <div class="hint" style="margin-top:8px;">
+      根包 = <b>没有入边的包</b>（没有任何其他包依赖它）。选择一条已保存的审计并勾选一个或多个根包后，
+      服务端沿 使用方 → 被依赖方 的边从剩余根包重算可达集合，展示因退役失去可达性的包、
+      仍被其他根包共用的包，以及随失联包消失的许可证冲突与原最短路径。
+      预演为只读操作，可反复调整勾选重新预演，不会创建审计或改动复核标记。
+    </div>
+    <div id="retire-roots" style="margin-top:12px;"></div>
+    <div id="retire-result" class="hidden-block" style="margin-top:18px;"></div>
+  </section>
+
+  <section class="card">
+    <h2>4. 单包许可证替换预演 <span class="pill">只读 · 不创建审计</span></h2>
+    <div id="relicense-alert" class="alert"></div>
+    <div class="row">
+      <select id="relicense-audit"></select>
+      <select id="relicense-package"></select>
+      <select id="relicense-license"></select>
+      <button id="btn-relicense" disabled>预演替换</button>
+    </div>
+    <div class="hint" style="margin-top:8px;">
+      选择一条已保存的审计、一个包和候选 SPDX 许可证（内置兼容矩阵中的 14 个标识）后，
+      服务端<b>仅替换该节点的许可证</b>，沿原依赖图（节点与依赖边不变）重算传递兼容判定与最短冲突路径，
+      并按「祖先包 → 被依赖包」配对原结果与预演结果：新增、消失及等级变化的冲突都会附上两侧的最短依赖路径，
+      同时给出硬冲突数、告警数与冲突总数的净变化。
+      预演为只读操作，可反复更换候选许可证重新预演，不会创建审计或改动复核标记。
+    </div>
+    <div id="relicense-result" class="hidden-block" style="margin-top:18px;"></div>
+  </section>
+
+  <section class="card">
+    <h2>5. 未解析依赖补边预演 <span class="pill">只读 · 不创建审计</span></h2>
+    <div id="edgefix-alert" class="alert"></div>
+    <div class="row">
+      <select id="edgefix-audit"></select>
+      <select id="edgefix-reference"></select>
+      <select id="edgefix-target"></select>
+      <button id="btn-edgefix" disabled>预演补边</button>
+    </div>
+    <div class="hint" style="margin-top:8px;">
+      选择一条已保存的审计后，中间下拉框列出<b>源包仍存在</b>的未解析依赖引用（源包 → 引用原文）；
+      再选一个现有目标包，服务端只在内存中补一条 使用方 → 被依赖方 的边并移除该未解析项
+      （其余节点、许可证与边完全不变），重算传递约束与最短冲突路径，
+      并按「祖先包 → 被依赖包」配对原结果与预演结果：展示新增及路径变化的冲突、
+      剩余未解析项与冲突数变化。引用或目标无效、补成自依赖或重复边会被拒绝（422）。
+      预演为只读操作，可反复更换选择重新预演，不会创建审计或改动复核标记。
+    </div>
+    <div id="edgefix-result" class="hidden-block" style="margin-top:18px;"></div>
+  </section>
+
+  <section id="result" class="hidden-block">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <h2 style="margin:0;">6. 审计结果 <span id="r-name" class="muted" style="font-weight:400;font-size:13px;"></span></h2>
+        <span id="r-status"></span>
+      </div>
+      <div class="stats" style="margin-top:14px;">
+        <div class="stat"><div class="num" id="s-pkgs">0</div><div class="label">规范化节点</div></div>
+        <div class="stat"><div class="num" id="s-edges">0</div><div class="label">依赖边</div></div>
+        <div class="stat"><div class="num" id="s-conf" style="color:var(--err)">0</div><div class="label">硬冲突</div></div>
+        <div class="stat"><div class="num" id="s-warn" style="color:var(--warn)">0</div><div class="label">许可证告警</div></div>
+        <div class="stat"><div class="num" id="s-unres" style="color:var(--muted)">0</div><div class="label">未解析依赖</div></div>
+      </div>
+      <div class="row" style="margin-top:16px;">
+        <input type="text" id="filter" placeholder="按包名筛选，如 pdf-export 或 gpl（匹配冲突路径上的任意节点）">
+        <button class="secondary" id="btn-filter">筛选</button>
+        <button class="secondary" id="btn-clear">清除</button>
+        <span style="flex:1"></span>
+        <button class="secondary" id="btn-export">⬇ 导出 JSON</button>
+      </div>
+      <div id="filter-note" class="hint" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>7. 冲突与最短依赖路径 <span id="review-stats" class="pill" style="font-weight:400;"></span></h2>
+      <div id="review-alert" class="alert"></div>
+      <div class="hint" style="margin-bottom:10px;">
+        许可证字段为矩阵内标识以 <b>OR</b> 连接的表达式（如 <span class="mono">MIT OR GPL-2.0</span>），
+        或 CycloneDX/原生声明中有<b>多个并列许可证条目</b>时，按<b>多许可证候选</b>处理：
+        祖先与依赖各有候选时对候选组合逐一调用兼容矩阵，<b>全部组合冲突才报硬冲突、全部兼容才不列出</b>，
+        其余（存在可兼容组合但并非全部兼容）列为「需人工确认」，并在卡片中展开每个组合的判定与矩阵理由（附原最短路径）。
+        含 <b>AND</b>、<b>括号</b>或<b>未知标识</b>的表达式不做拆分，仍按未知（需人工确认）处理；单许可证结果与原语义一致。
+        复核标记按「祖先节点 + 被依赖节点 + 双方规范化许可证」生成指纹，跨审计生效：
+        同一冲突在任意历史审计中重现都会带出同一条标记；许可证变更、标记过期或撤销后自动回到待复核。
+        每条冲突还可做<b>最少断边分析</b>：沿现有 使用方→被依赖方 图求让祖先包无法再到达被依赖包所需删除的
+        <b>最少依赖边</b>（并行路径、汇合路径与环均纳入计算，不只看当前最短路径），展示原最短路径、建议断边与断边后可达性。
+      </div>
+      <div id="conflicts"></div>
+    </div>
+
+    <div class="card">
+      <h2>8. 节点与传递约束</h2>
+      <div style="overflow-x:auto;">
+      <table id="nodes-table">
+        <thead><tr><th>节点</th><th>版本</th><th>许可证</th><th>约束来源（传递）</th><th>硬冲突</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>9. 告警与未解析依赖</h2>
+      <div id="warnings"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let currentResult = null;
+let currentFilter = "";
+
+function showAlert(msg) {
+  const el = $("alert");
+  el.textContent = msg;
+  el.className = "alert error show";
+}
+function clearAlert() { $("alert").className = "alert"; }
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+function catClass(cat) { return "badge cat-" + cat; }
+
+async function doAudit(manifest, name) {
+  clearAlert();
+  const body = { manifest: manifest };
+  if (name) body.name = name;
+  const resp = await fetch("/api/audit", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    showAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+    return null;
+  }
+  return data;
+}
+
+function renderPath(path) {
+  const needle = currentFilter.trim().toLowerCase();
+  return path.map((nid) => {
+    const node = (currentResult.nodes || []).find((n) => n.id === nid);
+    const lic = node ? node.license_display : "";
+    let label = esc(nid) + (lic ? ' <span class="muted">[' + esc(lic) + ']</span>' : "");
+    if (needle && nid.toLowerCase().includes(needle)) label = "<mark>" + label + "</mark>";
+    return label;
+  }).join('<span class="arrow">→</span>');
+}
+
+function render(result) {
+  currentResult = result;
+  $("result").className = "";
+  $("r-name").textContent = "— " + result.manifest_name + "（#" + result.audit_id + "，" + (result.created_at || "") + "）";
+  const s = result.summary;
+  $("s-pkgs").textContent = s.packages;
+  $("s-edges").textContent = s.edges;
+  $("s-conf").textContent = s.conflicts;
+  $("s-warn").textContent = s.license_warnings;
+  $("s-unres").textContent = s.unresolved;
+  const statusEl = $("r-status");
+  if (result.status === "conflict") {
+    statusEl.innerHTML = '<span class="badge conflict">发现硬冲突</span>';
+  } else if (result.status === "warning") {
+    statusEl.innerHTML = '<span class="badge warning">存在告警</span>';
+  } else {
+    statusEl.innerHTML = '<span class="badge clean">未发现冲突</span>';
+  }
+  renderConflicts(result);
+  renderNodes(result);
+  renderWarnings(result);
+  $("filter-note").textContent = "";
+}
+
+function renderConflicts(result) {
+  const box = $("conflicts");
+  const rv = (result.summary && result.summary.review) || null;
+  $("review-stats").textContent = rv && (rv.reviewed + rv.pending) > 0
+    ? "已复核 " + rv.reviewed + " · 待复核 " + rv.pending
+    : "";
+  if (!result.conflicts.length) {
+    box.innerHTML = '<p class="muted">当前筛选范围内未发现许可证冲突。</p>';
+    return;
+  }
+  box.innerHTML = result.conflicts.map((c) => `
+    <div class="conflict ${c.severity}">
+      <div class="head">
+        <span class="badge ${c.severity === "error" ? "conflict" : "warning"}">${c.severity === "error" ? "硬冲突" : "需人工确认"}</span>
+        ${reviewBadge(c)}
+        <span class="mono"><b>${esc(c.ancestor)}</b> ── ${renderLicenseRef(c.ancestor_license, c.ancestor_multi)} → ${renderLicenseRef(c.node_license, c.node_multi)} ── <b>${esc(c.node)}</b></span>
+        <span class="pill">最短路径 ${c.distance} 跳 · ${c.id}</span>
+      </div>
+      <div class="reason">${esc(c.reason)}</div>
+      <div class="path">${renderPath(c.path)}</div>
+      ${renderCombinations(c)}
+      ${reviewBox(c)}
+      ${edgecutBox(c)}
+    </div>`).join("");
+}
+
+// --- 多许可证候选 -------------------------------------------------------------
+
+const ST_STATUS_LABEL = { ok: "兼容", conflict: "冲突", warning: "需人工确认" };
+
+function renderLicenseRef(text, multi) {
+  // 冲突抬头里的许可证：多候选加“多候选 N 选 1”提示徽标
+  const label = esc(text);
+  return multi
+    ? '<span class="badge cat-multi" title="OR 选择关系，可任选其一">多候选</span> ' + label
+    : label;
+}
+
+function renderCombinations(c) {
+  const combos = c.candidate_combinations;
+  if (!combos || !combos.length) return "";
+  const counts = c.combination_counts || {};
+  const rows = combos.map((item) =>
+    "<tr><td class='mono'>" + esc(item.parent) + "</td><td class='mono'>" + esc(item.dep) +
+    "</td><td class='st-" + item.status + "'>" + ST_STATUS_LABEL[item.status] +
+    "</td><td class='muted'>" + esc(item.reason) + "</td></tr>"
+  ).join("");
+  return '<details class="combos"><summary>候选许可证组合判定（共 ' + combos.length +
+    " 个：兼容 " + (counts.ok || 0) + " · 冲突 " + (counts.conflict || 0) +
+    " · 需人工确认 " + (counts.warning || 0) +
+    "；OR 选择关系，存在兼容组合即非硬冲突）</summary>" +
+    '<table><thead><tr><th>祖先候选</th><th>依赖候选</th><th>判定</th><th>兼容矩阵理由</th></tr></thead>' +
+    "<tbody>" + rows + "</tbody></table></details>";
+}
+
+// --- 最少断边分析 -------------------------------------------------------------
+
+function edgecutBox(c) {
+  return '<div class="edgecut-box"><div class="row">' +
+    '<button class="secondary" onclick="runEdgecut(\'' + c.id + '\', this)">✂ 最少断边分析</button>' +
+    '<span class="hint">计算让 ' + esc(c.ancestor) + " 无法再到达 " + esc(c.node) +
+    " 所需删除的最少依赖边（并行/汇合/环均计入，只读，不改动审计与复核标记）</span>" +
+    "</div>" +
+    '<div id="edgecut-' + c.id + '" class="hidden-block" style="margin-top:10px;"></div></div>';
+}
+
+function renderEdgecutPath(path, cutPairs) {
+  const pairs = cutPairs || [];
+  return '<div class="path">' + path.map((nid, i) => {
+    const node = (currentResult.nodes || []).find((n) => n.id === nid);
+    const lic = node ? node.license_display : "";
+    let label = esc(nid) + (lic ? ' <span class="muted">[' + esc(lic) + "]</span>" : "");
+    if (i < path.length - 1 && pairs.some((pr) => pr[0] === nid && pr[1] === path[i + 1])) {
+      label = '<span class="cut-edge">' + label + "</span>";
+    }
+    return label;
+  }).join('<span class="arrow">→</span>') + "</div>";
+}
+
+async function runEdgecut(conflictId, btn) {
+  if (!currentResult) return;
+  clearReviewAlert();
+  const box = $("edgecut-" + conflictId);
+  box.className = "";
+  box.innerHTML = '<span class="hint">正在沿现有依赖图计算最大流/最小割…</span>';
+  btn.disabled = true;
+  try {
+    const resp = await fetch("/api/audits/" + currentResult.audit_id + "/edgecut/" +
+      encodeURIComponent(conflictId));
+    const data = await resp.json();
+    if (!resp.ok) {
+      box.className = "hidden-block";
+      showReviewAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      return;
+    }
+    renderEdgecutResult(conflictId, data);
+  } catch (e) {
+    box.className = "hidden-block";
+    showReviewAlert("最少断边分析请求失败：" + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderEdgecutResult(conflictId, d) {
+  const cutPairs = (d.cut_edges || []).map((e) => [e.source, e.target]);
+  let html = "";
+  const sevBadge = d.conflict.severity === "error"
+    ? '<span class="badge conflict">硬冲突</span>'
+    : '<span class="badge warning">需人工确认</span>';
+  html += '<div class="edgecut-summary">' + sevBadge + " " + esc(d.conflict.id) +
+    " · 让 <span class='mono'><b>" + esc(d.source) + "</b></span> 无法再到达 " +
+    "<span class='mono'><b>" + esc(d.target) + "</b></span>，最少需要删除 " +
+    '<b style="color:var(--err);font-size:15px;">' + d.cut_count + "</b> 条依赖边" +
+    " · 删除后可达性 " +
+    (d.reachable_after
+      ? '<span class="badge reach-yes">仍可达（异常）</span>'
+      : '<span class="badge reach-no">已不可达 ✓</span>') +
+    "</div>";
+
+  // 原最短路径（标红落在上面的建议断边）
+  html += '<div class="path-label"><span class="tag base">原审计</span>原最短依赖路径（' +
+    (d.original_distance) + " 跳）</div>" +
+    renderEdgecutPath(d.original_shortest_path || [], cutPairs);
+
+  // 建议断边
+  html += '<div class="path-label" style="margin-top:10px;">建议删除的依赖边（确定性最小割，共 ' +
+    d.cut_count + " 条；" + d.cut_edges_on_original_shortest_path + " 条落在原最短路径上）</div>";
+  if (d.cut_edges.length) {
+    html += '<div class="cut-list">' + d.cut_edges.map((e, i) =>
+      '<div class="cut-edge-item' + (e.on_original_shortest_path ? "" : " alternate") + '">' +
+      '<span class="pill">#' + (i + 1) + "</span>" +
+      '<span class="mono"><b>' + esc(e.source) + "</b> → <b>" + esc(e.target) + "</b></span>" +
+      (e.on_original_shortest_path ? '<span class="badge conflict">在原最短路径上</span>'
+                                   : '<span class="pill">并行/汇合路径上的边</span>') +
+      (e.from ? '<span class="hint">边来源：' + esc(e.from) + "</span>" : "") +
+      "</div>"
+    ).join("") + "</div>";
+  } else {
+    html += '<p class="muted">无需删除任何边：' + esc(d.source) + " 当前本就无法到达 " +
+      esc(d.target) + "。</p>";
+  }
+
+  // 边不相交见证路径（数量=最少断边数），折叠展示
+  if (d.edge_disjoint_paths_count) {
+    html += '<details class="edgecut-witness"><summary>为什么是 ' + d.cut_count +
+      " 条？查看 " + d.edge_disjoint_paths_count + " 条两两边不相交的可达路径" +
+      "（每条都必须被至少一条建议边截断）</summary>" +
+      d.edge_disjoint_paths.map((p, i) =>
+        '<div class="path-label" style="margin-top:6px;"><span class="pill">边不相交路径 #' +
+        (i + 1) + "（" + (p.length - 1) + " 跳）</span></div>" + renderEdgecutPath(p, cutPairs)
+      ).join("") + "</details>";
+  }
+
+  // 断边后可达性
+  html += '<div class="path-label" style="margin-top:10px;">删除建议边后的可达性</div>';
+  if (d.reachable_after) {
+    html += '<div class="path">' + renderEdgecutPath(d.residual_shortest_path || [], cutPairs) + "</div>";
+  } else {
+    html += '<p style="margin:4px 0;"><span class="badge reach-no">已不可达 ✓</span> ' +
+      '<span class="hint">从 ' + esc(d.source) + " 出发可达 " + d.reachable_after_count +
+      " 个包，其中不包含 " + esc(d.target) + "。</span></p>";
+  }
+  html += '<div class="hint" style="margin-top:8px;">' + esc(d.method) +
+    " 本分析为只读操作，不改动审计结果与复核标记。</div>";
+
+  $("edgecut-" + conflictId).innerHTML = html;
+}
+
+// --- 跨审计复核标记 -----------------------------------------------------------
+
+function showReviewAlert(msg) {
+  const el = $("review-alert");
+  el.textContent = msg;
+  el.className = "alert error show";
+}
+function clearReviewAlert() { $("review-alert").className = "alert"; }
+
+function reviewBadge(c) {
+  const r = c.review || { state: "pending" };
+  return r.state === "reviewed"
+    ? '<span class="badge review-ok">已复核</span>'
+    : '<span class="badge review-pending">待复核</span>';
+}
+
+function reviewBox(c) {
+  const r = c.review || { state: "pending" };
+  if (r.state === "reviewed") {
+    return '<div class="review-box">' +
+      '<span class="note">' + (r.note ? "复核备注：" + esc(r.note) : '<span class="muted">（无复核备注）</span>') + "</span>" +
+      '<span class="muted">标记于 ' + esc(r.created_at || "") +
+        (r.expires_at ? " · 失效于 " + esc(r.expires_at) : " · 长期有效") + "</span>" +
+      '<button class="secondary" onclick="revokeReview(' + r.review_id + ')">撤销标记</button>' +
+      "</div>";
+  }
+  return '<div class="review-box">' +
+    '<input type="text" id="review-note-' + c.id + '" placeholder="复核备注（如：法务已确认，允许组合分发）">' +
+    '<input type="datetime-local" id="review-exp-' + c.id + '" title="失效时间（留空则长期有效）">' +
+    '<button class="secondary" onclick="markReviewed(\'' + c.id + '\')">标记已复核</button>' +
+    '<span class="muted">留空失效时间则长期有效</span>' +
+    "</div>";
+}
+
+async function refreshConflicts() {
+  if (!currentResult) return;
+  const pkg = $("filter").value.trim();
+  const url = "/api/audits/" + currentResult.audit_id + (pkg ? "?package=" + encodeURIComponent(pkg) : "");
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if (!resp.ok) { showReviewAlert(data.detail || "刷新复核状态失败"); return; }
+  renderConflicts(data);
+}
+
+async function markReviewed(conflictId) {
+  clearReviewAlert();
+  const body = {
+    audit_id: currentResult.audit_id,
+    conflict_id: conflictId,
+    note: $("review-note-" + conflictId).value.trim(),
+  };
+  const expLocal = $("review-exp-" + conflictId).value;
+  if (expLocal) body.expires_at = new Date(expLocal).toISOString();
+  const resp = await fetch("/api/reviews", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    showReviewAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+    return;
+  }
+  await refreshConflicts();
+}
+
+async function revokeReview(reviewId) {
+  clearReviewAlert();
+  const resp = await fetch("/api/reviews/" + reviewId + "/revoke", { method: "POST" });
+  const data = await resp.json();
+  if (!resp.ok) {
+    showReviewAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+    return;
+  }
+  await refreshConflicts();
+}
+
+function renderNodes(result) {
+  const tbody = $("nodes-table").querySelector("tbody");
+  if (!result.nodes.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">当前筛选范围内没有节点。</td></tr>';
+    return;
+  }
+  tbody.innerHTML = result.nodes.map((n) => {
+    const cons = (n.constraints || []).map((c) =>
+      `<div class="mono" style="font-size:12px;">${esc(c.from)} <span class="muted">(${esc(c.license)}, ${c.distance} 跳)</span></div>`
+    ).join("") || '<span class="muted">无</span>';
+    return `<tr>
+      <td class="mono">${esc(n.name)}</td>
+      <td class="mono">${n.version_unspecified ? '<span class="muted">未指定</span>' : esc(n.version)}</td>
+      <td>${renderNodeLicense(n)}</td>
+      <td>${cons}</td>
+      <td>${n.conflict_count ? '<b style="color:var(--err)">' + n.conflict_count + '</b>' : '0'}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderNodeLicense(n) {
+  const badge = '<span class="badge ' + catClass(n.license_category) + '">' + esc(n.license_display) + "</span>";
+  const cands = n.license_candidates || [];
+  if (n.license_multi && cands.length > 1) {
+    const chips = cands.map((c) =>
+      '<li class="cand"><span class="badge ' + catClass(c.category) + '">' + esc(c.token) + "</span></li>"
+    ).join("");
+    return badge + ' <span class="pill">多候选（' + cands.length + " 选 1，OR）</span>" +
+      '<ul class="cand-list">' + chips + "</ul>";
+  }
+  return badge;
+}
+
+function renderWarnings(result) {
+  const box = $("warnings");
+  const items = [];
+  (result.warnings || []).forEach((w) => items.push(w));
+  if (!items.length) {
+    box.innerHTML = '<p class="muted">无告警，所有依赖引用均已解析。</p>';
+    return;
+  }
+  box.innerHTML = '<ul style="margin:0;padding-left:20px;">' +
+    items.map((w) => "<li>" + esc(w) + "</li>").join("") + "</ul>";
+}
+
+async function applyFilter() {
+  if (!currentResult) return;
+  const pkg = $("filter").value.trim();
+  currentFilter = pkg;
+  const url = "/api/audits/" + currentResult.audit_id + (pkg ? "?package=" + encodeURIComponent(pkg) : "");
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if (!resp.ok) { showAlert(data.detail || "筛选失败"); return; }
+  renderConflicts(data);
+  renderNodes(data);
+  renderWarnings(data);
+  $("filter-note").textContent = pkg
+    ? "已按「" + pkg + "」筛选：命中 " + data.nodes.length + " 个节点、" +
+      data.conflicts.length + " 个冲突（包含路径上经过该包的冲突）。导出 JSON 将使用同样筛选条件。"
+    : "";
+}
+
+$("btn-audit").addEventListener("click", async () => {
+  const text = $("input").value.trim();
+  if (!text) { showAlert("请粘贴 manifest JSON 或上传文件。"); return; }
+  let manifest;
+  try { manifest = JSON.parse(text); }
+  catch (e) { showAlert("JSON 解析失败：" + e.message); return; }
+  $("btn-audit").disabled = true;
+  const result = await doAudit(manifest, manifest.name);
+  $("btn-audit").disabled = false;
+  if (result) { currentFilter = ""; $("filter").value = ""; render(result); loadAuditList(); }
+});
+
+$("file").addEventListener("change", () => {
+  const file = $("file").files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { $("input").value = reader.result; clearAlert(); };
+  reader.readAsText(file);
+});
+
+$("btn-sample").addEventListener("click", async () => {
+  const data = await (await fetch("/api/sample")).json();
+  $("input").value = JSON.stringify(data, null, 2);
+  clearAlert();
+});
+
+$("btn-sample-cdx").addEventListener("click", async () => {
+  const data = await (await fetch("/api/sample/cyclonedx")).json();
+  $("input").value = JSON.stringify(data, null, 2);
+  clearAlert();
+});
+
+$("btn-filter").addEventListener("click", applyFilter);
+$("filter").addEventListener("keydown", (e) => { if (e.key === "Enter") applyFilter(); });
+$("btn-clear").addEventListener("click", () => {
+  $("filter").value = ""; currentFilter = "";
+  if (currentResult) { render(currentResult); }
+});
+
+$("btn-export").addEventListener("click", () => {
+  if (!currentResult) return;
+  const pkg = $("filter").value.trim();
+  const url = "/api/audits/" + currentResult.audit_id + "?download=true" +
+    (pkg ? "&package=" + encodeURIComponent(pkg) : "");
+  window.location.href = url;
+});
+
+// --- 两次审计对比 -----------------------------------------------------------
+
+function showCompareAlert(msg) {
+  const el = $("compare-alert");
+  el.textContent = msg;
+  el.className = "alert error show";
+}
+function clearCompareAlert() { $("compare-alert").className = "alert"; }
+
+const STATUS_LABEL = { conflict: "硬冲突", warning: "告警", clean: "无冲突" };
+
+async function loadAuditList() {
+  clearCompareAlert();
+  let items = [];
+  try {
+    const resp = await fetch("/api/audits?limit=100");
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || "加载历史审计失败");
+    items = data.items || [];
+  } catch (e) {
+    showCompareAlert(e.message);
+    return [];
+  }
+  const prev = { base: $("cmp-base").value, target: $("cmp-target").value, retire: $("retire-audit").value, relicense: $("relicense-audit").value, edgefix: $("edgefix-audit").value, repro: $("repro-audit").value };
+  const fill = (sel, selected) => {
+    sel.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = items.length ? "请选择审计记录…" : "（暂无历史审计，请先在上方执行一次审计）";
+    sel.appendChild(placeholder);
+    items.forEach((a) => {
+      const opt = document.createElement("option");
+      opt.value = String(a.id);
+      opt.textContent = "#" + a.id + " · " + a.name + " · " + STATUS_LABEL[a.status] + (a.conflict_count ? "（" + a.conflict_count + " 硬冲突）" : "") + " · " + (a.created_at || "");
+      sel.appendChild(opt);
+    });
+    if (selected && items.some((a) => String(a.id) === selected)) sel.value = selected;
+  };
+  fill($("cmp-base"), prev.base);
+  fill($("cmp-target"), prev.target || (items.length > 1 ? String(items[1].id) : ""));
+  fill($("retire-audit"), prev.retire || (items.length ? String(items[0].id) : ""));
+  fill($("relicense-audit"), prev.relicense || (items.length ? String(items[0].id) : ""));
+  fill($("edgefix-audit"), prev.edgefix || (items.length ? String(items[0].id) : ""));
+  fill($("repro-audit"), prev.repro || (items.length ? String(items[0].id) : ""));
+  // 首次加载默认选最新两条（列表为倒序：items[0] 最新）
+  if (!prev.base && items.length) $("cmp-base").value = String(items[0].id);
+  // 退役预演的根包列表随审计选择联动加载
+  if ($("retire-audit").value) {
+    await loadRetireRoots();
+  } else {
+    $("retire-roots").innerHTML = "";
+    $("retire-result").className = "hidden-block";
+    $("btn-rehearse").disabled = true;
+  }
+  // 许可证替换预演的包/候选许可证列表随审计选择联动加载
+  if ($("relicense-audit").value) {
+    await loadRelicensePreview();
+  } else {
+    relicensePackages = [];
+    $("relicense-package").innerHTML = "";
+    $("relicense-license").innerHTML = "";
+    $("relicense-result").className = "hidden-block";
+    $("btn-relicense").disabled = true;
+  }
+  // 补边预演的未解析引用/目标包列表随审计选择联动加载
+  if ($("edgefix-audit").value) {
+    await loadEdgefixPreview();
+  } else {
+    edgefixItems = [];
+    edgefixPackages = [];
+    $("edgefix-reference").innerHTML = "";
+    $("edgefix-target").innerHTML = "";
+    $("edgefix-result").className = "hidden-block";
+    $("btn-edgefix").disabled = true;
+  }
+  return items;
+}
+
+function severityBadge(sev) {
+  if (sev === "error") return '<span class="badge conflict">硬冲突</span>';
+  if (sev === "warning") return '<span class="badge warning">需人工确认</span>';
+  return '<span class="muted">—</span>';
+}
+
+function renderComparePath(path, side, nodeMap) {
+  return '<div class="path-label"><span class="tag ' + side + '">' +
+    (side === "base" ? "基准" : "目标") + "</span>最短依赖路径（" + (path.length - 1) + " 跳）</div>" +
+    '<div class="path ' + side + '">' + path.map((nid) => {
+      const node = nodeMap[nid];
+      const lic = node ? node.license_display : "";
+      return esc(nid) + (lic ? ' <span class="muted">[' + esc(lic) + ']</span>' : "");
+    }).join('<span class="arrow">→</span>') + "</div>";
+}
+
+function findingTitle(f) {
+  const present = f.target || f.base;
+  return '<span class="mono"><b>' + esc(f.ancestor) + "</b> ── <span class='muted'>许可证</span> ── <b>" +
+    esc(f.node) + "</b></span>";
+}
+
+function renderFindingsBox(title, list) {
+  if (!list.length) return "";
+  const rows = list.map((f) => {
+    const present = f.target || f.base;
+    const paths = [];
+    if (f.base) paths.push(renderComparePath(f.base.path, "base", window.__cmpNodeMaps.base));
+    if (f.target) paths.push(renderComparePath(f.target.path, "target", window.__cmpNodeMaps.target));
+    const head = f.change === "changed"
+      ? severityBadge(f.severity_base) + '<span class="diff-arrow">→</span>' + severityBadge(f.severity_target)
+      : severityBadge(present.severity);
+    let fields = "";
+    if (f.fields_changed && f.fields_changed.length) {
+      const labels = f.fields_changed.map((k) => window.__cmpLabels[k] || k).join("、");
+      fields = '<div class="fields-changed">变化项：' + esc(labels) + "</div>";
+    }
+    const reason = present.reason ? '<div class="reason">' + esc(present.reason) + "</div>" : "";
+    return '<div class="conflict ' + (present.severity === "error" ? "error" : "warning") + '">' +
+      '<div class="head">' + head + findingTitle(f) + "</div>" +
+      fields + reason + paths.join("") + "</div>";
+  }).join("");
+  return "<h3 style='margin:16px 0 8px;font-size:14px;'>" + esc(title) +
+    ' <span class="pill">' + list.length + " 条</span></h3>" + rows;
+}
+
+function renderLicensePair(b, t) {
+  const tag = (n) => (n && n.license_multi ? '<span class="badge cat-multi">多候选</span> ' : "");
+  const lb = b ? tag(b) + esc(b.license_display) : "—";
+  const lt = t ? tag(t) + esc(t.license_display) : "—";
+  if (b && t && b.license !== t.license) {
+    return '<span class="diff-remove">' + lb + "</span><span class='diff-arrow'>→</span><span class='diff-add'>" + lt + "</span>";
+  }
+  return lb === "—" && lt === "—" ? "—" : (t ? lt : lb);
+}
+
+function renderCompare(data) {
+  window.__cmpNodeMaps = {
+    base: {},
+    target: {},
+  };
+  // 节点完整许可证信息在各审计结果中拿不到，对比 API 的 node brief 已含 license_display，
+  // 路径展示所需的节点许可证直接用 nodes 配对表补。
+  data.nodes.forEach((n) => {
+    if (n.base) window.__cmpNodeMaps.base[n.id] = n.base;
+    if (n.target) window.__cmpNodeMaps.target[n.id] = n.target;
+  });
+  window.__cmpLabels = data.field_labels || {};
+
+  const meta = (m) => m ? ("#" + m.audit_id + " · " + (m.manifest_name || "") + " · " + (m.created_at || "")) : "";
+  const s = data.summary;
+  let html = '<div class="meta-line">基准 <span class="mono">' + esc(meta(data.base)) + "</span>" +
+    '<span class="diff-arrow">→</span>目标 <span class="mono">' + esc(meta(data.target)) + "</span></div>";
+
+  html += '<div class="stats">' +
+    '<div class="stat"><div class="num diff-add">+' + s.findings.added + "</div><div class='label'>新增冲突/告警（硬冲突 " + s.findings.added_errors + "）</div></div>" +
+    '<div class="stat"><div class="num diff-remove">−' + s.findings.removed + "</div><div class='label'>消失冲突/告警（硬冲突 " + s.findings.removed_errors + "）</div></div>" +
+    '<div class="stat"><div class="num diff-change">≈' + s.findings.changed + "</div><div class='label'>状态变化（硬冲突 " + s.findings.changed_errors + "）</div></div>" +
+    '<div class="stat"><div class="num diff-add">+' + s.nodes.added + " / <span class='diff-remove'>−" + s.nodes.removed + "</span></div><div class='label'>新增/消失节点</div></div>" +
+    '<div class="stat"><div class="num">' + s.nodes.license_changed + "</div><div class='label'>同节点许可证变化</div></div>" +
+    "</div>";
+
+  html += renderFindingsBox("🆕 新增的冲突/告警（仅目标审计存在）", data.added) +
+    renderFindingsBox("❌ 消失的冲突/告警（仅基准审计存在）", data.removed) +
+    renderFindingsBox("🔁 配对项变化（状态 / 许可证 / 最短路径）", data.changed);
+  if (!data.added.length && !data.removed.length && !data.changed.length) {
+    html += '<p class="muted" style="margin-top:12px;">两次审计的许可证冲突/告警完全一致。</p>';
+  }
+
+  html += '<details style="margin-top:16px;"><summary>查看节点配对明细（' + data.nodes.length + " 个）</summary>" +
+    '<div style="overflow-x:auto;margin-top:8px;"><table><thead><tr>' +
+    "<th>包名</th><th>版本</th><th>变化</th><th>许可证（基准 → 目标）</th><th>硬冲突数（基准 → 目标）</th>" +
+    "</tr></thead><tbody>";
+  const CHANGE_UI = {
+    added: '<span class="badge clean">新增节点</span>',
+    removed: '<span class="badge conflict">消失节点</span>',
+    unchanged: '<span class="pill">配对成功</span>',
+  };
+  data.nodes.forEach((n) => {
+    const version = n.version_unspecified ? '<span class="muted">未指定</span>' : esc(n.version);
+    let change = CHANGE_UI[n.change] || CHANGE_UI.unchanged;
+    if (n.change === "unchanged" && n.license_changed) change += ' <span class="badge warning">许可证变化</span>';
+    const cb = n.base ? n.base.conflict_count : null;
+    const ct = n.target ? n.target.conflict_count : null;
+    const counts = (cb === null ? "—" : cb) + '<span class="diff-arrow">→</span>' + (ct === null ? "—" : ct);
+    html += "<tr><td class='mono'>" + esc(n.name) + "</td><td class='mono'>" + version +
+      "</td><td>" + change + "</td><td>" + renderLicensePair(n.base, n.target) +
+      "</td><td class='mono'>" + counts + "</td></tr>";
+  });
+  html += "</tbody></table></div></details>";
+
+  $("compare-result").innerHTML = html;
+  $("compare-result").className = "";
+}
+
+$("btn-compare").addEventListener("click", async () => {
+  clearCompareAlert();
+  const baseId = $("cmp-base").value;
+  const targetId = $("cmp-target").value;
+  if (!baseId || !targetId) { showCompareAlert("请先选择两条审计记录。"); return; }
+  if (baseId === targetId) { showCompareAlert("请选择两条不同的审计记录。"); return; }
+  $("btn-compare").disabled = true;
+  try {
+    const resp = await fetch("/api/audits/compare/" + baseId + "/" + targetId);
+    const data = await resp.json();
+    if (!resp.ok) { showCompareAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)); return; }
+    renderCompare(data);
+  } catch (e) {
+    showCompareAlert("对比请求失败：" + e.message);
+  } finally {
+    $("btn-compare").disabled = false;
+  }
+});
+
+$("btn-refresh-audits").addEventListener("click", loadAuditList);
+
+// --- 审计复现包：下载与上传核验（只读） -----------------------------------------
+
+let reproFile = null;  // 待核验的复现包文件
+
+function showReproAlert(msg) {
+  const el = $("repro-alert");
+  el.textContent = msg;
+  el.className = "alert error show";
+}
+function clearReproAlert() { $("repro-alert").className = "alert"; }
+
+$("btn-repro-download").addEventListener("click", () => {
+  clearReproAlert();
+  const aid = $("repro-audit").value;
+  if (!aid) { showReproAlert("请先选择一条审计记录再下载复现包。"); return; }
+  window.location.href = "/api/audits/" + aid + "/repro";
+});
+
+$("repro-file").addEventListener("change", () => {
+  reproFile = $("repro-file").files[0] || null;
+  $("repro-file-name").textContent = reproFile ? "已选择：" + reproFile.name : "";
+  $("btn-repro-verify").disabled = !reproFile;
+  clearReproAlert();
+});
+
+function renderReproVerify(data) {
+  const checkRow = (c) => {
+    const badge = c.ok
+      ? '<span class="badge clean">一致</span>'
+      : '<span class="badge conflict">不一致</span>';
+    let detail = "";
+    if (c.id === "recompute" && !c.ok) {
+      detail = '<div class="hint" style="margin-top:4px;">' +
+        (c.error ? esc(c.error)
+                : "首个不一致字段：<span class='mono'><b>" + esc(c.field || "") + "</b></span>" +
+                  "（保存值 <span class='mono'>" + esc(JSON.stringify(c.stored)) + "</span>，" +
+                  "复算值 <span class='mono'>" + esc(JSON.stringify(c.recomputed)) + "</span>）") +
+        "</div>";
+    }
+    return '<div style="display:flex;gap:8px;align-items:baseline;margin:6px 0;flex-wrap:wrap;">' +
+      badge + "<span>" + esc(c.label) + "</span>" + detail + "</div>";
+  };
+
+  let html = '<div class="meta-line">' +
+    (data.ok ? '<span class="badge clean">✔ 核验通过</span>' : '<span class="badge conflict">✘ 核验未通过</span>') +
+    ' 复现包 <span class="mono"><b>' + esc(data.name || "") + "</b></span>" +
+    (data.source_audit_id != null ? ' <span class="pill">来源审计 #' + esc(data.source_audit_id) + "</span>" : "") +
+    (data.exported_at ? ' <span class="muted">导出于 ' + esc(data.exported_at) + "</span>" : "") +
+    "</div>";
+
+  html += '<div style="margin:10px 0;">' + (data.checks || []).map(checkRow).join("") + "</div>";
+
+  const r = data.recomputed || {};
+  const num = (v) => (v === null || v === undefined ? "—" : v);
+  html += '<div class="stats">' +
+    '<div class="stat"><div class="num">' + num(r.packages) + '</div><div class="label">复算节点</div></div>' +
+    '<div class="stat"><div class="num">' + num(r.edges) + '</div><div class="label">复算依赖边</div></div>' +
+    '<div class="stat"><div class="num" style="color:var(--err)">' + num(r.conflicts) + '</div><div class="label">复算硬冲突</div></div>' +
+    '<div class="stat"><div class="num" style="color:var(--warn)">' + num(r.license_warnings) + '</div><div class="label">复算告警</div></div>' +
+    "</div>";
+
+  html += '<div class="hint" style="margin-top:10px;">' + esc(data.message || "") +
+    " 核验为只读操作，未创建审计、未改动复核标记。</div>";
+
+  const box = $("repro-result");
+  box.innerHTML = html;
+  box.className = "";
+}
+
+$("btn-repro-verify").addEventListener("click", async () => {
+  clearReproAlert();
+  if (!reproFile) { showReproAlert("请先选择要核验的复现包文件。"); return; }
+  $("btn-repro-verify").disabled = true;
+  try {
+    const form = new FormData();
+    form.append("file", reproFile);
+    const resp = await fetch("/api/repro/verify/upload", { method: "POST", body: form });
+    const data = await resp.json();
+    if (!resp.ok) {
+      $("repro-result").className = "hidden-block";
+      showReproAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      return;
+    }
+    renderReproVerify(data);
+  } catch (e) {
+    showReproAlert("复现包核验请求失败：" + e.message);
+  } finally {
+    $("btn-repro-verify").disabled = !reproFile;
+  }
+});
+
+// --- 根包退役预演 -----------------------------------------------------------
+
+let retireNodeMap = {};  // 节点 id -> 节点（渲染原最短路径时标注许可证）
+
+function showRetireAlert(msg) {
+  const el = $("retire-alert");
+  el.textContent = msg;
+  el.className = "alert error show";
+}
+function clearRetireAlert() { $("retire-alert").className = "alert"; }
+
+async function loadRetireRoots() {
+  clearRetireAlert();
+  const aid = $("retire-audit").value;
+  $("retire-result").className = "hidden-block";
+  $("retire-result").innerHTML = "";
+  if (!aid) {
+    $("retire-roots").innerHTML = "";
+    $("btn-rehearse").disabled = true;
+    return;
+  }
+  let rootsData, auditData;
+  try {
+    // 并行拉取根包列表（预览模式）与完整审计（供路径渲染节点许可证）
+    const [rootsResp, auditResp] = await Promise.all([
+      fetch("/api/audits/" + aid + "/retire"),
+      fetch("/api/audits/" + aid),
+    ]);
+    rootsData = await rootsResp.json();
+    auditData = await auditResp.json();
+    if (!rootsResp.ok) throw new Error(typeof rootsData.detail === "string" ? rootsData.detail : JSON.stringify(rootsData.detail));
+    if (!auditResp.ok) throw new Error(typeof auditData.detail === "string" ? auditData.detail : JSON.stringify(auditData.detail));
+  } catch (e) {
+    showRetireAlert("加载根包失败：" + e.message);
+    return;
+  }
+  retireNodeMap = {};
+  (auditData.nodes || []).forEach((n) => { retireNodeMap[n.id] = n; });
+  renderRetireRoots(rootsData);
+}
+
+function renderRetireRoots(data) {
+  const box = $("retire-roots");
+  if (!data.roots || !data.roots.length) {
+    box.innerHTML = '<p class="muted">该审计没有根包（所有包都存在入边，可能构成依赖环），无法做退役预演。</p>';
+    $("btn-rehearse").disabled = true;
+    return;
+  }
+  box.innerHTML = '<div class="hint" style="margin-bottom:8px;">共 ' + data.roots.length +
+    " 个根包，勾选要模拟退役的根包（至少保留一个，不可全选）：</div>" +
+    data.roots.map((r) =>
+      '<label style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:7px;padding:6px 10px;margin:0 8px 8px 0;cursor:pointer;background:#fcfdff;">' +
+      '<input type="checkbox" class="retire-check" value="' + esc(r.id) + '">' +
+      '<span class="mono"><b>' + esc(r.id) + "</b></span>" +
+      '<span class="badge ' + catClass(r.license_category) + '">' + esc(r.license_display) + "</span>" +
+      '<span class="pill">可达 ' + r.reachable + " 包</span>" +
+      "</label>"
+    ).join("");
+  $("btn-rehearse").disabled = false;
+}
+
+function renderRetirePath(path) {
+  return '<div class="path">' + path.map((nid) => {
+    const node = retireNodeMap[nid];
+    const lic = node ? node.license_display : "";
+    return esc(nid) + (lic ? ' <span class="muted">[' + esc(lic) + "]</span>" : "");
+  }).join('<span class="arrow">→</span>') + "</div>";
+}
+
+function renderRetireResult(data) {
+  const s = data.summary;
+  let html = '<div class="meta-line">模拟退役 <span class="mono"><b>' + data.retired.map(esc).join("、") + "</b></span>" +
+    '<span class="diff-arrow">→</span>剩余根包 <b>' + s.remaining_roots + "</b> / " + s.roots + " 个</div>";
+  html += '<div class="stats">' +
+    '<div class="stat"><div class="num">' + s.reachable_before + '<span class="diff-arrow">→</span>' + s.reachable_after + "</div><div class='label'>可达包（退役前 → 后）</div></div>" +
+    '<div class="stat"><div class="num diff-remove">' + s.lost + "</div><div class='label'>失去可达性的包</div></div>" +
+    '<div class="stat"><div class="num">' + s.shared + "</div><div class='label'>仍被其他根包共用的包</div></div>" +
+    '<div class="stat"><div class="num" style="color:var(--err)">' + s.disappearing_conflicts + "</div><div class='label'>消失的冲突/告警（硬冲突 " + s.disappearing_errors + "）</div></div>" +
+    "</div>";
+
+  html += '<h3 style="margin:16px 0 8px;font-size:14px;">🗑️ 因退役失去可达性的包 <span class="pill">' + s.lost + " 个</span></h3>";
+  if (data.lost.length) {
+    html += '<div style="overflow-x:auto;"><table><thead><tr><th>包</th><th>许可证</th><th>硬冲突</th><th>说明</th></tr></thead><tbody>' +
+      data.lost.map((n) =>
+        "<tr><td class='mono'>" + esc(n.id) + "</td>" +
+        "<td><span class='badge " + catClass(n.license_category) + "'>" + esc(n.license_display) + "</span></td>" +
+        "<td>" + (n.conflict_count ? "<b style='color:var(--err)'>" + n.conflict_count + "</b>" : "0") + "</td>" +
+        "<td>" + (n.retired_root ? '<span class="badge conflict">被退役的根包</span>' : '<span class="muted">仅经退役根包可达</span>') + "</td></tr>"
+      ).join("") + "</tbody></table></div>";
+  } else {
+    html += '<p class="muted">没有包因这次退役失去可达性。</p>';
+  }
+
+  html += '<h3 style="margin:16px 0 8px;font-size:14px;">🤝 仍被其他根包共用的包 <span class="pill">' + s.shared + " 个</span></h3>";
+  if (data.shared.length) {
+    html += '<div style="overflow-x:auto;"><table><thead><tr><th>包</th><th>许可证</th><th>仍可达它的剩余根包</th></tr></thead><tbody>' +
+      data.shared.map((n) =>
+        "<tr><td class='mono'>" + esc(n.id) + "</td>" +
+        "<td><span class='badge " + catClass(n.license_category) + "'>" + esc(n.license_display) + "</span></td>" +
+        "<td class='mono'>" + n.reached_by.map(esc).join("、") + "</td></tr>"
+      ).join("") + "</tbody></table></div>";
+  } else {
+    html += '<p class="muted">退役根包可达的包没有与其他根包共用。</p>';
+  }
+
+  html += '<h3 style="margin:16px 0 8px;font-size:14px;">🔥 随失联包消失的许可证冲突 <span class="pill">' + s.disappearing_conflicts + " 条</span></h3>";
+  if (data.disappearing_conflicts.length) {
+    html += data.disappearing_conflicts.map((c) =>
+      '<div class="conflict ' + (c.severity === "error" ? "error" : "warning") + '">' +
+      '<div class="head"><span class="badge ' + (c.severity === "error" ? "conflict" : "warning") + '">' +
+      (c.severity === "error" ? "硬冲突" : "需人工确认") + "</span>" +
+      '<span class="mono"><b>' + esc(c.ancestor) + "</b> ── " +
+      (c.ancestor_multi ? '<span class="badge cat-multi">多候选</span> ' : "") + esc(c.ancestor_license) +
+      " → " +
+      (c.node_multi ? '<span class="badge cat-multi">多候选</span> ' : "") + esc(c.node_license) +
+      " ── <b>" + esc(c.node) + "</b></span>" +
+      '<span class="pill">原最短路径 ' + c.distance + " 跳 · " + esc(c.id) + "</span></div>" +
+      '<div class="reason">' + esc(c.reason) + "</div>" +
+      renderRetirePath(c.path) +
+      (c.candidate_combinations && c.candidate_combinations.length ? renderCombinations(c) : "") +
+      "</div>"
+    ).join("");
+  } else {
+    html += '<p class="muted">没有许可证冲突随这次退役消失。</p>';
+  }
+
+  const box = $("retire-result");
+  box.innerHTML = html;
+  box.className = "";
+}
+
+$("btn-load-roots").addEventListener("click", loadRetireRoots);
+$("retire-audit").addEventListener("change", loadRetireRoots);
+$("btn-rehearse").addEventListener("click", async () => {
+  clearRetireAlert();
+  const aid = $("retire-audit").value;
+  if (!aid) { showRetireAlert("请先选择一条审计记录。"); return; }
+  const checked = Array.from(document.querySelectorAll(".retire-check:checked")).map((c) => c.value);
+  if (!checked.length) { showRetireAlert("请至少勾选一个要模拟退役的根包。"); return; }
+  const params = checked.map((id) => "retire=" + encodeURIComponent(id)).join("&");
+  $("btn-rehearse").disabled = true;
+  try {
+    const resp = await fetch("/api/audits/" + aid + "/retire?" + params);
+    const data = await resp.json();
+    if (!resp.ok) {
+      showRetireAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      return;
+    }
+    renderRetireResult(data);
+  } catch (e) {
+    showRetireAlert("预演请求失败：" + e.message);
+  } finally {
+    $("btn-rehearse").disabled = false;
+  }
+});
+
+// --- 单包许可证替换预演 -------------------------------------------------------
+
+let relicensePackages = [];  // 当前选中审计的包列表（预览接口返回）
+
+function showRelicenseAlert(msg) {
+  const el = $("relicense-alert");
+  el.textContent = msg;
+  el.className = "alert error show";
+}
+function clearRelicenseAlert() { $("relicense-alert").className = "alert"; }
+
+async function loadRelicensePreview() {
+  clearRelicenseAlert();
+  const aid = $("relicense-audit").value;
+  $("relicense-result").className = "hidden-block";
+  $("relicense-result").innerHTML = "";
+  const pkgSel = $("relicense-package"), licSel = $("relicense-license");
+  pkgSel.innerHTML = "";
+  licSel.innerHTML = "";
+  if (!aid) { $("btn-relicense").disabled = true; return; }
+  let data;
+  try {
+    const resp = await fetch("/api/audits/" + aid + "/relicense");
+    data = await resp.json();
+    if (!resp.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+  } catch (e) {
+    showRelicenseAlert("加载包列表失败：" + e.message);
+    $("btn-relicense").disabled = true;
+    return;
+  }
+  relicensePackages = data.packages || [];
+  if (!relicensePackages.length) {
+    pkgSel.innerHTML = "<option value=''>（该审计没有可替换的包）</option>";
+    $("btn-relicense").disabled = true;
+    return;
+  }
+  relicensePackages.forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.id + " · 当前 " + p.license_display;
+    pkgSel.appendChild(opt);
+  });
+  (data.candidate_licenses || []).forEach((c) => {
+    const opt = document.createElement("option");
+    opt.value = c.token;
+    opt.textContent = c.token + "（" + c.category_label + "）";
+    licSel.appendChild(opt);
+  });
+  syncRelicenseLicense();
+  $("btn-relicense").disabled = false;
+}
+
+function syncRelicenseLicense() {
+  // 默认选中该包当前的许可证，便于改成其他候选；未知许可证不在矩阵中则保持首项
+  const pkg = relicensePackages.find((p) => p.id === $("relicense-package").value);
+  if (!pkg) return;
+  const licSel = $("relicense-license");
+  if (Array.from(licSel.options).some((o) => o.value === pkg.license)) licSel.value = pkg.license;
+}
+
+function renderRelicenseResult(data) {
+  const cmp = data.comparison;
+  // 复用两次审计对比的路径/条目渲染（基准=原审计结果，目标=预演结果）
+  window.__cmpNodeMaps = { base: {}, target: {} };
+  cmp.nodes.forEach((n) => {
+    if (n.base) window.__cmpNodeMaps.base[n.id] = n.base;
+    if (n.target) window.__cmpNodeMaps.target[n.id] = n.target;
+  });
+  window.__cmpLabels = cmp.field_labels || {};
+
+  const s = data.summary;
+  const t = data.target;
+  const net = (n) => (n > 0 ? "+" + n : String(n));
+  const netSpan = (n) => '<b class="' + (n > 0 ? "diff-remove" : n < 0 ? "diff-add" : "") + '">(' + net(n) + ")</b>";
+  const beforeAfter = (b, a, n) => b + '<span class="diff-arrow">→</span>' + a + " " + netSpan(n);
+
+  let html = '<div class="meta-line">审计 <span class="mono">#' + esc(data.audit.audit_id) + " · " +
+    esc(data.audit.manifest_name || "") + "</span> · 包 <span class='mono'><b>" + esc(t.id) + "</b></span> 许可证 " +
+    '<span class="diff-remove">' + esc(t.license_before.display) + '</span><span class="diff-arrow">→</span>' +
+    '<span class="diff-add">' + esc(t.license_after.display) + "</span>" +
+    '<span class="muted">（基准=原审计结果，目标=替换许可证后的预演结果）</span></div>';
+
+  html += '<div class="stats">' +
+    '<div class="stat"><div class="num">' + beforeAfter(s.conflicts_before, s.conflicts_after, s.conflicts_net) + '</div><div class="label">硬冲突（原 → 预演 · 净变化）</div></div>' +
+    '<div class="stat"><div class="num">' + beforeAfter(s.warnings_before, s.warnings_after, s.warnings_net) + '</div><div class="label">许可证告警（原 → 预演 · 净变化）</div></div>' +
+    '<div class="stat"><div class="num">' + beforeAfter(s.total_before, s.total_after, s.total_net) + '</div><div class="label">冲突总数（硬冲突+告警）净变化</div></div>' +
+    '<div class="stat"><div class="num diff-add">+' + s.added + '</div><div class="label">新增冲突/告警（硬冲突 ' + s.added_errors + "）</div></div>" +
+    '<div class="stat"><div class="num diff-remove">−' + s.removed + '</div><div class="label">消失冲突/告警（硬冲突 ' + s.removed_errors + "）</div></div>" +
+    '<div class="stat"><div class="num diff-change">≈' + s.changed + '</div><div class="label">配对项变化（等级变化 ' + s.severity_changed + "）</div></div>" +
+    "</div>";
+
+  html += renderFindingsBox("🆕 预演新增的冲突/告警（仅预演结果存在）", cmp.added) +
+    renderFindingsBox("❌ 预演后消失的冲突/告警（仅原结果存在）", cmp.removed) +
+    renderFindingsBox("🔁 等级/判定变化的配对冲突（两侧均存在）", cmp.changed);
+  if (!cmp.added.length && !cmp.removed.length && !cmp.changed.length) {
+    html += '<p class="muted" style="margin-top:12px;">替换为 ' + esc(t.license_after.display) + " 后，冲突/告警没有任何变化。</p>";
+  }
+
+  const box = $("relicense-result");
+  box.innerHTML = html;
+  box.className = "";
+}
+
+$("relicense-audit").addEventListener("change", loadRelicensePreview);
+$("relicense-package").addEventListener("change", syncRelicenseLicense);
+$("btn-relicense").addEventListener("click", async () => {
+  clearRelicenseAlert();
+  const aid = $("relicense-audit").value;
+  const pkg = $("relicense-package").value;
+  const lic = $("relicense-license").value;
+  if (!aid) { showRelicenseAlert("请先选择一条审计记录。"); return; }
+  if (!pkg) { showRelicenseAlert("请选择要替换许可证的包。"); return; }
+  if (!lic) { showRelicenseAlert("请选择候选 SPDX 许可证。"); return; }
+  $("btn-relicense").disabled = true;
+  try {
+    const resp = await fetch("/api/audits/" + aid + "/relicense?package=" +
+      encodeURIComponent(pkg) + "&license=" + encodeURIComponent(lic));
+    const data = await resp.json();
+    if (!resp.ok) {
+      showRelicenseAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      return;
+    }
+    renderRelicenseResult(data);
+  } catch (e) {
+    showRelicenseAlert("预演请求失败：" + e.message);
+  } finally {
+    $("btn-relicense").disabled = false;
+  }
+});
+
+// --- 未解析依赖补边预演 -------------------------------------------------------
+
+let edgefixItems = [];     // 当前审计源包仍存在的未解析引用（预览接口返回）
+let edgefixPackages = [];  // 当前审计的包列表（可选目标包）
+
+function showEdgefixAlert(msg) {
+  const el = $("edgefix-alert");
+  el.textContent = msg;
+  el.className = "alert error show";
+}
+function clearEdgefixAlert() { $("edgefix-alert").className = "alert"; }
+
+async function loadEdgefixPreview() {
+  clearEdgefixAlert();
+  const aid = $("edgefix-audit").value;
+  $("edgefix-result").className = "hidden-block";
+  $("edgefix-result").innerHTML = "";
+  const refSel = $("edgefix-reference"), tgtSel = $("edgefix-target");
+  refSel.innerHTML = "";
+  tgtSel.innerHTML = "";
+  if (!aid) { $("btn-edgefix").disabled = true; return; }
+  let data;
+  try {
+    const resp = await fetch("/api/audits/" + aid + "/edgefix");
+    data = await resp.json();
+    if (!resp.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+  } catch (e) {
+    showEdgefixAlert("加载未解析引用失败：" + e.message);
+    $("btn-edgefix").disabled = true;
+    return;
+  }
+  edgefixItems = data.unresolved || [];
+  edgefixPackages = data.packages || [];
+  if (!edgefixItems.length) {
+    refSel.innerHTML = "<option value=''>（该审计没有源包仍存在的未解析引用）</option>";
+    tgtSel.innerHTML = "<option value=''>（无可选目标包）</option>";
+    $("btn-edgefix").disabled = true;
+    return;
+  }
+  edgefixItems.forEach((u, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = u.source + " → " + u.reference + "（" + u.reason + "）";
+    refSel.appendChild(opt);
+  });
+  syncEdgefixTargets();
+  $("btn-edgefix").disabled = false;
+}
+
+function syncEdgefixTargets() {
+  // 目标包下拉框：排除源包自身（自依赖）与源包已依赖的包（重复边）
+  const idx = parseInt($("edgefix-reference").value, 10);
+  const item = edgefixItems[idx];
+  const tgtSel = $("edgefix-target");
+  tgtSel.innerHTML = "";
+  if (!item) return;
+  const excluded = new Set([item.source].concat(item.existing_targets || []));
+  const options = edgefixPackages.filter((p) => !excluded.has(p.id));
+  if (!options.length) {
+    tgtSel.innerHTML = "<option value=''>（没有可补边的目标包）</option>";
+    return;
+  }
+  options.forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.id + " · " + p.license_display;
+    tgtSel.appendChild(opt);
+  });
+}
+
+function renderEdgefixResult(data) {
+  const cmp = data.comparison;
+  // 复用两次审计对比的路径/条目渲染（基准=原审计结果，目标=补边后的预演结果）
+  window.__cmpNodeMaps = { base: {}, target: {} };
+  cmp.nodes.forEach((n) => {
+    if (n.base) window.__cmpNodeMaps.base[n.id] = n.base;
+    if (n.target) window.__cmpNodeMaps.target[n.id] = n.target;
+  });
+  window.__cmpLabels = cmp.field_labels || {};
+
+  const s = data.summary;
+  const fix = data.fix;
+  const net = (n) => (n > 0 ? "+" + n : String(n));
+  const netSpan = (n) => '<b class="' + (n > 0 ? "diff-remove" : n < 0 ? "diff-add" : "") + '">(' + net(n) + ")</b>";
+  const beforeAfter = (b, a, n) => b + '<span class="diff-arrow">→</span>' + a + " " + netSpan(n);
+
+  let html = '<div class="meta-line">审计 <span class="mono">#' + esc(data.audit.audit_id) + " · " +
+    esc(data.audit.manifest_name || "") + "</span> · 补边 <span class='mono'><b>" + esc(fix.source) +
+    "</b> → <b>" + esc(fix.target) + "</b></span>" +
+    '<span class="muted">（未解析引用 ' + esc(fix.reference) + " 绑定到现有包 " + esc(fix.target) +
+    "；基准=原审计结果，目标=补边后的预演结果）</span></div>";
+
+  html += '<div class="stats">' +
+    '<div class="stat"><div class="num">' + beforeAfter(s.conflicts_before, s.conflicts_after, s.conflicts_net) + '</div><div class="label">硬冲突（原 → 预演 · 净变化）</div></div>' +
+    '<div class="stat"><div class="num">' + beforeAfter(s.warnings_before, s.warnings_after, s.warnings_net) + '</div><div class="label">许可证告警（原 → 预演 · 净变化）</div></div>' +
+    '<div class="stat"><div class="num">' + beforeAfter(s.total_before, s.total_after, s.total_net) + '</div><div class="label">冲突总数（硬冲突+告警）净变化</div></div>' +
+    '<div class="stat"><div class="num">' + beforeAfter(s.unresolved_before, s.unresolved_after, s.unresolved_net) + '</div><div class="label">未解析依赖（原 → 预演 · 净变化）</div></div>' +
+    '<div class="stat"><div class="num diff-add">+' + s.added + '</div><div class="label">新增冲突/告警（硬冲突 ' + s.added_errors + "）</div></div>" +
+    '<div class="stat"><div class="num diff-change">≈' + s.path_changed + '</div><div class="label">最短路径变化的配对冲突</div></div>' +
+    "</div>";
+
+  html += renderFindingsBox("🆕 补边新增的冲突/告警（仅预演结果存在）", cmp.added) +
+    renderFindingsBox("🔀 最短路径变化的配对冲突（两侧均存在）", cmp.changed);
+  if (!cmp.added.length && !cmp.changed.length) {
+    html += '<p class="muted" style="margin-top:12px;">补边后冲突/告警没有任何新增或路径变化。</p>';
+  }
+
+  const rest = data.remaining_unresolved || [];
+  html += '<h3 style="margin:16px 0 8px;font-size:14px;">🧩 补边后剩余的未解析依赖 <span class="pill">' + rest.length + " 条</span></h3>";
+  if (rest.length) {
+    html += '<div style="overflow-x:auto;"><table><thead><tr><th>源包</th><th>未解析引用</th><th>原因</th></tr></thead><tbody>' +
+      rest.map((u) =>
+        "<tr><td class='mono'>" + esc(u.source) + "</td><td class='mono'>" + esc(u.reference) +
+        "</td><td>" + esc(u.reason) + "</td></tr>"
+      ).join("") + "</tbody></table></div>";
+  } else {
+    html += '<p class="muted">补边后没有剩余的未解析依赖。</p>';
+  }
+
+  const box = $("edgefix-result");
+  box.innerHTML = html;
+  box.className = "";
+}
+
+$("edgefix-audit").addEventListener("change", loadEdgefixPreview);
+$("edgefix-reference").addEventListener("change", syncEdgefixTargets);
+$("btn-edgefix").addEventListener("click", async () => {
+  clearEdgefixAlert();
+  const aid = $("edgefix-audit").value;
+  const idx = parseInt($("edgefix-reference").value, 10);
+  const item = edgefixItems[idx];
+  const tgt = $("edgefix-target").value;
+  if (!aid) { showEdgefixAlert("请先选择一条审计记录。"); return; }
+  if (!item) { showEdgefixAlert("请选择一条未解析引用。"); return; }
+  if (!tgt) { showEdgefixAlert("请选择要补边指向的目标包。"); return; }
+  $("btn-edgefix").disabled = true;
+  try {
+    const resp = await fetch("/api/audits/" + aid + "/edgefix?source=" + encodeURIComponent(item.source) +
+      "&reference=" + encodeURIComponent(item.reference) + "&target=" + encodeURIComponent(tgt));
+    const data = await resp.json();
+    if (!resp.ok) {
+      showEdgefixAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      return;
+    }
+    renderEdgefixResult(data);
+  } catch (e) {
+    showEdgefixAlert("预演请求失败：" + e.message);
+  } finally {
+    $("btn-edgefix").disabled = false;
+  }
+});
+
+// 自动载入示例，便于首次访问
+$("btn-sample").click();
+// 页面加载即拉取历史审计，便于立即选择对比
+loadAuditList();
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+{
+  "name": "billing-platform-demo",
+  "packages": [
+    {
+      "name": "web-app",
+      "version": "2.1.0",
+      "license": "AGPL-3.0",
+      "dependencies": [
+        "billing-core@1.2.0",
+        "ui-kit@0.9.0",
+        "@org/logger@3.0.0",
+        "cache-redis"
+      ]
+    },
+    {
+      "name": "billing-core",
+      "version": "1.2.0",
+      "license": "GPL-2.0",
+      "dependencies": [
+        { "name": "pdf-export", "version": "^4.0.0" },
+        { "name": "crypto-lib", "version": "1.1.0" },
+        { "name": "legacy-math", "version": "0.3.0" }
+      ]
+    },
+    {
+      "name": "pdf-export",
+      "version": "4.0.0",
+      "license": "Apache 2.0",
+      "dependencies": ["font-pack@2.0.0"]
+    },
+    { "name": "font-pack", "version": "2.0.0", "license": "OFL-1.1" },
+    { "name": "crypto-lib", "version": "1.1.0", "license": "Apache-2.0" },
+    { "name": "legacy-math", "version": "0.3.0", "license": "GPL-3.0" },
+    {
+      "name": "ui-kit",
+      "version": "0.9.0",
+      "license": "MIT",
+      "dependencies": ["icon-set@1.0.0", { "name": "vendor-widget", "version": "5.0.0" }]
+    },
+    { "name": "icon-set", "version": "1.0.0", "license": "CC0" },
+    { "name": "vendor-widget", "version": "5.0.0", "license": "Proprietary" },
+    {
+      "name": "@org/logger",
+      "version": "3.0.0",
+      "license": "LGPL-2.1",
+      "dependencies": ["string-utils@2.2.0"]
+    },
+    { "name": "string-utils", "version": "2.2.0", "license": "ISC" },
+    {
+      "name": "reports",
+      "version": "0.5.0",
+      "license": "MPL-2.0",
+      "dependencies": ["mpl-helper@1.0.0"]
+    },
+    { "name": "mpl-helper", "version": "1.0.0", "license": "GPL-2.0" },
+    {
+      "name": "admin-cli",
+      "version": "1.4.0",
+      "license": "GPL-3.0",
+      "dependencies": ["crypto-lib@1.1.0", "statsd-client@2.0.0"]
+    },
+    { "name": "statsd-client", "version": "2.0.0", "license": "Proprietary" },
+    { "name": "http-client", "version": "3.4.0", "license": "Apache-2.0 OR GPL-2.0" }
+  ],
+  "edges": [
+    { "source": "web-app@2.1.0", "target": "reports@0.5.0", "type": "optional" },
+    { "source": "billing-core@1.2.0", "target": "@org/logger@3.0.0" },
+    { "source": "billing-core@1.2.0", "target": "http-client@3.4.0" }
+  ]
+}
