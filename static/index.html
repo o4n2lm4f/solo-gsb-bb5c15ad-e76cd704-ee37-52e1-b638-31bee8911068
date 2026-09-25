@@ -147,6 +147,18 @@
   .edgecut-witness { font-size: 12px; }
   .badge.reach-no { background: var(--ok-bg); color: var(--ok); }
   .badge.reach-yes { background: var(--err-bg); color: var(--err); }
+  .badge.ls-feasible { background: var(--ok-bg); color: var(--ok); }
+  .badge.ls-manual { background: var(--warn-bg); color: var(--warn); }
+  .badge.ls-unsolvable { background: var(--err-bg); color: var(--err); }
+  .badge.ls-undetermined { background: #eef2f8; color: var(--muted); }
+  .ls-relation {
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px;
+    background: #fcfdff;
+  }
+  .ls-relation.conflict { border-left: 4px solid var(--err); }
+  .ls-relation.warning { border-left: 4px solid #d9a413; }
+  .ls-relation.undetermined { border-left: 4px solid var(--muted); }
+  .ls-relation .mono { font-size: 12px; }
 </style>
 </head>
 <body>
@@ -268,10 +280,29 @@
     <div id="edgefix-result" class="hidden-block" style="margin-top:18px;"></div>
   </section>
 
+  <section class="card">
+    <h2>6. 全图许可证选定 <span class="pill">只读 · 不创建审计 · 不改动复核标记</span></h2>
+    <div id="graphselect-alert" class="alert"></div>
+    <div class="row">
+      <select id="graphselect-audit"></select>
+      <button id="btn-graphselect">求全图一致选择</button>
+    </div>
+    <div class="hint" style="margin-top:8px;">
+      对所选已保存审计的<b>每个包</b>，从其现有 <b>OR 表达式 / 并列条目候选</b>中固定选定一个许可证
+      （只声明一个许可证的包视为固定），沿 <b>使用方 → 被依赖方</b> 的<b>全部可达关系</b>（含传递关系）
+      逐条调用现有兼容矩阵，用确定性回溯搜索求一份全图一致选择：
+      <b>全部关系兼容</b>即给出可行方案；若只能<b>避开硬冲突</b>则标为<span class="badge ls-manual">需人工确认</span>并列出告警关系；
+      若<b>任何选择都含硬冲突</b>则给出<span class="badge ls-unsolvable">无解结论</span>与硬冲突最少的选择；
+      <b>未知许可证包</b>或<b>未解析依赖</b>一律明确标为<span class="badge ls-undetermined">未判定</span>，不声称全图可行。
+      分析为只读操作，不改动原审计结果与复核标记。
+    </div>
+    <div id="graphselect-result" class="hidden-block" style="margin-top:18px;"></div>
+  </section>
+
   <section id="result" class="hidden-block">
     <div class="card">
       <div class="row" style="justify-content:space-between;">
-        <h2 style="margin:0;">6. 审计结果 <span id="r-name" class="muted" style="font-weight:400;font-size:13px;"></span></h2>
+        <h2 style="margin:0;">7. 审计结果 <span id="r-name" class="muted" style="font-weight:400;font-size:13px;"></span></h2>
         <span id="r-status"></span>
       </div>
       <div class="stats" style="margin-top:14px;">
@@ -292,7 +323,7 @@
     </div>
 
     <div class="card">
-      <h2>7. 冲突与最短依赖路径 <span id="review-stats" class="pill" style="font-weight:400;"></span></h2>
+      <h2>8. 冲突与最短依赖路径 <span id="review-stats" class="pill" style="font-weight:400;"></span></h2>
       <div id="review-alert" class="alert"></div>
       <div class="hint" style="margin-bottom:10px;">
         许可证字段为矩阵内标识以 <b>OR</b> 连接的表达式（如 <span class="mono">MIT OR GPL-2.0</span>），
@@ -309,7 +340,7 @@
     </div>
 
     <div class="card">
-      <h2>8. 节点与传递约束</h2>
+      <h2>9. 节点与传递约束</h2>
       <div style="overflow-x:auto;">
       <table id="nodes-table">
         <thead><tr><th>节点</th><th>版本</th><th>许可证</th><th>约束来源（传递）</th><th>硬冲突</th></tr></thead>
@@ -319,7 +350,7 @@
     </div>
 
     <div class="card">
-      <h2>9. 告警与未解析依赖</h2>
+      <h2>10. 告警与未解析依赖</h2>
       <div id="warnings"></div>
     </div>
   </section>
@@ -772,7 +803,7 @@ async function loadAuditList() {
     showCompareAlert(e.message);
     return [];
   }
-  const prev = { base: $("cmp-base").value, target: $("cmp-target").value, retire: $("retire-audit").value, relicense: $("relicense-audit").value, edgefix: $("edgefix-audit").value, repro: $("repro-audit").value };
+  const prev = { base: $("cmp-base").value, target: $("cmp-target").value, retire: $("retire-audit").value, relicense: $("relicense-audit").value, edgefix: $("edgefix-audit").value, repro: $("repro-audit").value, graphselect: $("graphselect-audit").value };
   const fill = (sel, selected) => {
     sel.innerHTML = "";
     const placeholder = document.createElement("option");
@@ -793,6 +824,7 @@ async function loadAuditList() {
   fill($("relicense-audit"), prev.relicense || (items.length ? String(items[0].id) : ""));
   fill($("edgefix-audit"), prev.edgefix || (items.length ? String(items[0].id) : ""));
   fill($("repro-audit"), prev.repro || (items.length ? String(items[0].id) : ""));
+  fill($("graphselect-audit"), prev.graphselect || (items.length ? String(items[0].id) : ""));
   // 首次加载默认选最新两条（列表为倒序：items[0] 最新）
   if (!prev.base && items.length) $("cmp-base").value = String(items[0].id);
   // 退役预演的根包列表随审计选择联动加载
@@ -1489,6 +1521,149 @@ $("btn-edgefix").addEventListener("click", async () => {
     showEdgefixAlert("预演请求失败：" + e.message);
   } finally {
     $("btn-edgefix").disabled = false;
+  }
+});
+
+// --- 全图许可证选定（只读） ---------------------------------------------------
+
+const LS_STATUS_UI = {
+  feasible: { badge: "ls-feasible", text: "✔ 全图可行：所有可达关系均兼容" },
+  "manual-review": { badge: "ls-manual", text: "⚠ 需人工确认：已避开全部硬冲突，仍有告警关系" },
+  unsolvable: { badge: "ls-unsolvable", text: "✘ 无解：任何选择都含硬冲突" },
+  undetermined: { badge: "ls-undetermined", text: "？未判定：存在未知许可证或未解析依赖" },
+};
+const LS_JUDGED_UI = {
+  feasible: "已知部分全兼容",
+  "manual-review": "已知部分可避开硬冲突（仍有告警）",
+  unsolvable: "已知部分无解（硬冲突不可避免）",
+};
+
+function showGraphselectAlert(msg) {
+  const el = $("graphselect-alert");
+  el.textContent = msg;
+  el.className = "alert error show";
+}
+function clearGraphselectAlert() { $("graphselect-alert").className = "alert"; }
+
+function renderLsPath(path, nodeMap) {
+  if (!path || !path.length) return '<span class="muted">（无可达路径：未解析依赖）</span>';
+  return '<div class="path">' + path.map((nid) => {
+    const node = nodeMap[nid];
+    const lic = node ? node.license_display : "";
+    return esc(nid) + (lic ? ' <span class="muted">[' + esc(lic) + ']</span>' : "");
+  }).join('<span class="arrow">→</span>') + "</div>";
+}
+
+function renderLsRelation(rel, cls, label, nodeMap) {
+  let head = '<span class="badge ' + (cls === "conflict" ? "conflict" : cls === "warning" ? "warning" : "ls-undetermined") + '">' + label + "</span> ";
+  if (rel.kind === "unresolved-dependency") {
+    head += '<span class="mono"><b>' + esc(rel.ancestor) + "</b> → <b>" + esc(rel.node) + "</b></span>";
+  } else {
+    head += '<span class="mono"><b>' + esc(rel.ancestor) + "</b> ── " +
+      esc(rel.ancestor_selected || "?") + " → " + esc(rel.node_selected || "?") +
+      " ── <b>" + esc(rel.node) + "</b></span>";
+  }
+  const dist = rel.distance != null ? '<span class="pill">' + rel.distance + " 跳可达</span>" : "";
+  return '<div class="ls-relation ' + cls + '"><div class="head" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+    head + dist + "</div>" +
+    (rel.reason ? '<div class="reason" style="margin:6px 0;">' + esc(rel.reason) + "</div>" : "") +
+    renderLsPath(rel.path, nodeMap) + "</div>";
+}
+
+function renderGraphselect(data) {
+  const s = data.summary;
+  const nodeMap = {};
+  (data.selections || []).forEach((sel) => { nodeMap[sel.node.id] = sel.node; });
+  const ui = LS_STATUS_UI[data.status] || LS_STATUS_UI.undetermined;
+
+  let html = '<div class="meta-line">审计 <span class="mono">#' + esc(data.audit.audit_id || "") + " · " +
+    esc(data.audit.manifest_name || "") + "</span></div>";
+  html += '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;">' +
+    '<span class="badge ' + ui.badge + '" style="font-size:13px;padding:4px 12px;">' + ui.text + "</span>" +
+    (data.judged_outcome ? '<span class="pill">已知许可证子图结论：' + esc(LS_JUDGED_UI[data.judged_outcome] || data.judged_outcome) + "</span>" : "") +
+    '<span class="pill">确定性结果 · 搜索节点 ' + s.search_nodes + (s.search_truncated ? "（已截断）" : "") + "</span>" +
+    "</div>";
+  html += '<div style="margin:6px 0 12px;">' + esc(data.conclusion) + "</div>";
+
+  html += '<div class="stats">' +
+    '<div class="stat"><div class="num">' + s.packages + "</div><div class='label'>包（已知 " + s.known_packages + " · 未知 " + s.unknown_license_packages + "）</div></div>" +
+    '<div class="stat"><div class="num">' + s.multi_license_packages + "</div><div class='label'>多候选包（OR/并列，需选定）</div></div>" +
+    '<div class="stat"><div class="num">' + s.reachable_relations + "</div><div class='label'>可达关系（含传递）</div></div>" +
+    '<div class="stat"><div class="num" style="color:var(--ok);">' + s.relations_ok + "</div><div class='label'>选择后兼容</div></div>" +
+    '<div class="stat"><div class="num" style="color:var(--warn);">' + s.relations_warning + "</div><div class='label'>需人工确认关系</div></div>" +
+    '<div class="stat"><div class="num" style="color:var(--err);">' + s.relations_conflict + "</div><div class='label'>硬冲突关系</div></div>" +
+    '<div class="stat"><div class="num" style="color:var(--muted);">' + s.relations_undetermined + "</div><div class='label'>未判定关系（未知许可证 / " + s.unresolved_dependencies + " 条未解析）</div></div>" +
+    "</div>";
+
+  // 每包选择明细
+  const rows = data.selections.map((sel) => {
+    const n = sel.node;
+    let chosen;
+    if (sel.status === "unknown-license") {
+      chosen = '<span class="badge cat-unknown">' + esc(n.license_display || "UNLICENSED") + "</span> <span class='badge ls-undetermined'>未判定</span>";
+    } else {
+      chosen = '<span class="badge ' + catClass(sel.selected_category) + '">' + esc(sel.selected_display) + "</span>" +
+        (sel.fixed ? ' <span class="pill">固定（单许可证）</span>' : ' <span class="pill">从 ' + (n.license_candidates || []).length + " 个候选中选定</span>");
+    }
+    const cands = (n.license_candidates || []).map((c) =>
+      '<li class="cand"><span class="badge ' + catClass(c.category) + '">' + esc(c.token) + "</span></li>"
+    ).join("");
+    return "<tr><td class='mono'>" + esc(n.id) + "</td>" +
+      "<td>" + chosen + (cands && n.license_multi ? '<ul class="cand-list">' + cands + "</ul>" : "") + "</td>" +
+      "<td class='muted'>" + esc(sel.reason || "") + "</td></tr>";
+  }).join("");
+  html += '<h3 style="margin:16px 0 8px;font-size:14px;">📦 每包许可证选择 <span class="pill">' + s.packages + " 个</span></h3>" +
+    '<div style="overflow-x:auto;"><table><thead><tr><th>包</th><th>选定许可证</th><th>说明</th></tr></thead><tbody>' +
+    rows + "</tbody></table></div>";
+
+  // 关系分组
+  html += '<h3 style="margin:16px 0 8px;font-size:14px;">🔥 硬冲突关系（最终选择下） <span class="pill">' +
+    data.hard_conflict_relations.length + " 条</span></h3>";
+  html += data.hard_conflict_relations.length
+    ? data.hard_conflict_relations.map((r) => renderLsRelation(r, "conflict", "硬冲突", nodeMap)).join("")
+    : '<p class="muted">最终选择下没有硬冲突关系。</p>';
+
+  html += '<h3 style="margin:16px 0 8px;font-size:14px;">⚠ 需人工确认关系（矩阵 warning） <span class="pill">' +
+    data.warning_relations.length + " 条</span></h3>";
+  html += data.warning_relations.length
+    ? data.warning_relations.map((r) => renderLsRelation(r, "warning", "需人工确认", nodeMap)).join("")
+    : '<p class="muted">最终选择下没有需人工确认的关系。</p>';
+
+  html += '<h3 style="margin:16px 0 8px;font-size:14px;">？ 未判定关系（未知许可证 / 未解析依赖） <span class="pill">' +
+    data.undetermined_relations.length + " 条</span></h3>";
+  html += data.undetermined_relations.length
+    ? data.undetermined_relations.map((r) => renderLsRelation(r, "undetermined", "未判定", nodeMap)).join("")
+    : '<p class="muted">没有未判定关系。</p>';
+
+  html += '<div class="hint" style="margin-top:10px;">' + esc(data.method) +
+    " 本分析为只读操作，不创建审计、不改动原审计结果与复核标记。</div>";
+
+  const box = $("graphselect-result");
+  box.innerHTML = html;
+  box.className = "";
+}
+
+$("graphselect-audit").addEventListener("change", () => {
+  clearGraphselectAlert();
+  $("graphselect-result").className = "hidden-block";
+});
+$("btn-graphselect").addEventListener("click", async () => {
+  clearGraphselectAlert();
+  const aid = $("graphselect-audit").value;
+  if (!aid) { showGraphselectAlert("请先选择一条审计记录。"); return; }
+  $("btn-graphselect").disabled = true;
+  try {
+    const resp = await fetch("/api/audits/" + aid + "/license-select");
+    const data = await resp.json();
+    if (!resp.ok) {
+      showGraphselectAlert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      return;
+    }
+    renderGraphselect(data);
+  } catch (e) {
+    showGraphselectAlert("全图许可证选定请求失败：" + e.message);
+  } finally {
+    $("btn-graphselect").disabled = false;
   }
 });
 

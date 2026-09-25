@@ -18,6 +18,7 @@ from . import (
     database,
     edgecut as edgecut_mod,
     edgefix as edgefix_mod,
+    graphselect as graphselect_mod,
     licenses,
     relicense as relicense_mod,
     repro as repro_mod,
@@ -246,6 +247,21 @@ def edgecut_analysis(audit_id: int, conflict_id: str) -> Dict[str, Any]:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get(
+    "/api/audits/{audit_id}/license-select",
+    tags=["audit"],
+    summary="全图许可证选定（只读）：每包从现有 OR/并列候选中固定选一个，求全图一致选择",
+)
+def graph_license_selection(audit_id: int) -> Dict[str, Any]:
+    result = database.get_audit(audit_id)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="审计记录不存在：%s。全图许可证选定为只读操作，不会创建新审计。" % audit_id,
+        )
+    return graphselect_mod.select_graph_licenses(result)
 
 
 @app.get("/api/audits/{audit_id}", tags=["audit"], summary="获取某次审计结果（支持按包筛选/导出）")

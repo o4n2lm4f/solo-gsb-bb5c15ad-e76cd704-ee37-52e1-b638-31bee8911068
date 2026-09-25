@@ -46,7 +46,7 @@ manifest（或直接上传 **CycloneDX JSON** SBOM），系统会：
     展示新增及最短路径变化的冲突（附两侧路径）、剩余未解析项与冲突数净变化；
     引用或目标无效、补成自依赖或重复边返回明确错误（422）；预演为纯只读操作，
     **不创建审计、不改动复核标记**，原生 manifest 与 CycloneDX 审计均可使用。
-12. **最少断边分析** —— 在网页第 7 节选定一条已保存审计中的冲突或告警后（或调用
+12. **最少断边分析** —— 在网页第 8 节选定一条已保存审计中的冲突或告警后（或调用
     `GET /api/audits/{id}/edgecut/{conflict_id}`），沿审计保存的现有
     **使用方 → 被依赖方** 图，计算要让该条冲突的祖先包无法再到达被依赖包所需删除的
     **最少依赖边**（有向图 s-t 最小边割：单位容量 Edmonds-Karp 最大流 = 最小割）：
@@ -55,7 +55,25 @@ manifest（或直接上传 **CycloneDX JSON** SBOM），系统会：
     网页展示原最短路径、建议断边（标出落在原最短路径上的边）与断边后是否仍可达。
     审计或冲突/告警不存在时返回明确错误（404）；分析为纯只读操作，
     **不改动原审计结果与复核标记**，原生 manifest 与 CycloneDX 审计均可使用；
-13. **审计复现包（可离线转交）** —— 在网页第 2 节选择一条历史审计即可下载复现包
+13. **全图许可证选定** —— 在网页第 6 节选择一条已保存审计后（或调用
+    `GET /api/audits/{id}/license-select`），服务端对**每个包**从其现有
+    **OR 表达式 / 并列条目候选**中固定选定一个许可证（只声明一个许可证的包
+    视为固定），沿 **使用方 → 被依赖方** 的**全部可达关系**（含传递关系，
+    非仅直接边）逐条调用现有兼容矩阵，用确定性回溯搜索（MRV + 分支限界）
+    求一份全图一致的选择：
+    - 存在**所有关系均兼容**的方案 → 结论「全图可行」，返回每包选择；
+    - 无法全兼容但能**避开全部硬冲突** → 标为「**需人工确认**」，列出最终选择下
+      仍为矩阵 warning 的告警关系（附最短可达路径）；
+    - **任何选择都含硬冲突** → 给出「**无解**」结论，同时返回硬冲突最少的
+      确定性选择与硬冲突关系清单；
+    - **未知许可证包**或**未解析依赖**一律明确标为「**未判定**」（包级与关系级
+      分别列出），已知许可证子图仍给出判定，但**不能声称全图可行**；
+      若已知子图本身无解（硬冲突不会因日后补全而消失），整体仍判无解。
+
+    页面展示结论徽标、兼容/告警/硬冲突/未判定关系统计、每包选定的许可证与候选、
+    三类关系清单及各自的最短可达路径。分析为纯只读操作，**不创建审计、不改动原审计
+    结果与复核标记**，原生 manifest 与 CycloneDX 审计均可使用；
+14. **审计复现包（可离线转交）** —— 在网页第 2 节选择一条历史审计即可下载复现包
     （或调用 `GET /api/audits/{id}/repro`）：从 SQLite 取出**原始 manifest** 与
     **未附着实时复核标记的保存结果**，导出含格式版本（`audit-repro/v1`）、审计名称
     及两者 **SHA-256 摘要**的单个 JSON 文件，可离线转交。上传该包核验
@@ -123,7 +141,7 @@ docker compose up --build          # 前台启动（加 -d 可后台运行）
 
 | 地址 | 说明 |
 | --- | --- |
-| <http://localhost:8000/> | 网页界面（已自动载入示例 manifest，可一键切换 CycloneDX 示例；第 2 节可对比两次历史审计、下载/上传核验审计复现包，第 3 节可做根包退役预演，第 4 节可做单包许可证替换预演，第 5 节可做未解析依赖补边预演，第 7 节可对单条冲突做最少断边分析） |
+| <http://localhost:8000/> | 网页界面（已自动载入示例 manifest，可一键切换 CycloneDX 示例；第 2 节可对比两次历史审计、下载/上传核验审计复现包，第 3 节可做根包退役预演，第 4 节可做单包许可证替换预演，第 5 节可做未解析依赖补边预演，第 6 节可做全图许可证选定，第 8 节可对单条冲突做最少断边分析） |
 | <http://localhost:8000/docs> | Swagger 风格交互式 JSON API 文档 |
 | <http://localhost:8000/redoc> | ReDoc API 文档 |
 | <http://localhost:8000/api/matrix> | 许可证兼容矩阵（机器可读） |
@@ -278,6 +296,7 @@ $ curl -s -X POST http://localhost:8000/api/audit -H "Content-Type: application/
 | GET | `/api/audits/{id}/relicense?package=a@1&license=MIT` | **单包许可证替换预演**（只读；不带参数返回可选包与候选许可证列表） |
 | GET | `/api/audits/{id}/edgefix?source=a@1&reference=x@2&target=x@1` | **未解析依赖补边预演**（只读；不带参数返回源包仍存在的未解析引用与目标包列表） |
 | GET | `/api/audits/{id}/edgecut/{conflict_id}` | **最少断边分析**（只读；返回让祖先包无法再到达被依赖包的确定性最少断边集合） |
+| GET | `/api/audits/{id}/license-select` | **全图许可证选定**（只读；每包从现有 OR/并列候选固定选一个，按全部可达关系求全图一致选择） |
 | GET | `/api/audits/{id}/repro` | **导出审计复现包**（原始 manifest + 保存结果 + 两者 SHA-256 摘要，可离线转交） |
 | POST | `/api/repro/verify` | **核验复现包**（JSON 请求体，只读：重算摘要 + 分析器复算逐项比对） |
 | POST | `/api/repro/verify/upload` | **上传复现包文件核验**（multipart，只读，不创建审计） |
@@ -390,7 +409,7 @@ curl http://localhost:8000/api/reviews/1                          # 单条记录
 curl -X POST http://localhost:8000/api/reviews/1/revoke           # 撤销（保留记录，条目回到待复核）
 ```
 
-网页端在第 5 节每条冲突卡片上直接展示「待复核 / 已复核」徽标：待复核条目可填写
+网页端在第 8 节每条冲突卡片上直接展示「待复核 / 已复核」徽标：待复核条目可填写
 复核备注与失效时间后一键打标，已复核条目显示备注、失效时间并提供「撤销标记」按钮，
 操作后列表自动刷新。删除审计记录不会删除复核标记（标记按指纹跨审计生效）。
 
@@ -624,11 +643,95 @@ HTTP/1.1 404 Not Found
 {"detail":"审计 #1 中不存在冲突/告警条目：C999。"}
 ```
 
-网页端在第 7 节每条冲突/告警卡片上点击「✂ 最少断边分析」即可：
+网页端在第 8 节每条冲突/告警卡片上点击「✂ 最少断边分析」即可：
 页面展示原最短路径（落在上面的建议断边以红色波浪线标出）、建议删除边清单
 （区分原最短路径上的边与并行/汇合路径上的边）、边不相交见证路径（折叠区）
 以及断边后是否仍可达的徽标与残留路径；可对任意条目反复分析，
 审计结果与复核标记都不会被改动。
+
+### 全图许可证选定接口
+
+对一条**已保存审计**，把每个包从其现有候选许可证（SPDX OR 表达式或多个并列
+条目解析出的候选集合；单许可证包候选只有一个，视为固定）中**固定选定一个**，
+沿 *使用方 → 被依赖方* 的**全部可达关系**（BFS 传递闭包，含最短可达路径）
+逐条调用现有兼容矩阵，求一份全图一致的选择：
+
+```bash
+curl http://localhost:8000/api/audits/1/license-select
+```
+
+求解是确定性的回溯搜索（MRV 选变量、候选声明顺序选值，按
+`(硬冲突数, 告警数)` 字典序分支限界），结论（`status`）分四种：
+
+| `status` | 含义 |
+| --- | --- |
+| `feasible` | **全图可行**：存在所有可达关系均兼容的选择（硬冲突 0、告警 0） |
+| `manual-review` | **需人工确认**：无法全兼容，但存在避开全部硬冲突的选择；`warning_relations` 列出残留的矩阵 warning 关系 |
+| `unsolvable` | **无解**：任何选择都至少含一条硬冲突；返回硬冲突最少的选择与 `hard_conflict_relations` 清单 |
+| `undetermined` | **未判定**：审计含未知许可证包或未解析依赖；这些包/关系明确列入未判定清单，不声称全图可行。`judged_outcome` 另给已知许可证子图的结论（已知子图本身无解时整体仍为 `unsolvable`） |
+
+返回内容：
+
+- `conclusion` —— 中文结论说明；`has_undetermined` / `judged_outcome` 为机读标记；
+- `summary` —— 包数（已知/未知/多候选/固定）、可达关系数、未解析依赖数，
+  以及最终选择下的 `relations_ok` / `relations_warning` / `relations_conflict` /
+  `relations_undetermined` 计数、`all_relations_compatible` /
+  `avoids_hard_conflicts` / `fully_determined` 布尔位与搜索节点数；
+- `selections` —— **每包选择**：`selected_token` / `selected_display` /
+  `selected_category`、`fixed`（单许可证固定 vs 多候选选定）、`status`
+  （`selected` / `unknown-license`）与说明；多候选包同时保留其候选清单；
+- `hard_conflict_relations` / `warning_relations` —— 最终选择下仍不兼容的
+  关系，每条含 `ancestor` / `node` / 双方 `*_selected` 许可证、矩阵原因与
+  BFS `path` 最短可达路径、`distance` 跳数；
+- `undetermined_relations` / `unresolved_dependencies` /
+  `unknown_license_packages` —— 未判定项：未知许可证导致的关系（标明未知端
+  是祖先还是被依赖方）与未解析依赖分别列出。
+
+```json
+{
+  "kind": "graph-license-selection",
+  "read_only": true,
+  "deterministic": true,
+  "status": "manual-review",
+  "judged_outcome": "manual-review",
+  "summary": {"packages": 2, "known_packages": 2, "unknown_license_packages": 0,
+              "multi_license_packages": 1, "reachable_relations": 1,
+              "relations_ok": 0, "relations_warning": 1,
+              "relations_conflict": 0, "relations_undetermined": 0,
+              "all_relations_compatible": false, "avoids_hard_conflicts": true,
+              "fully_determined": true},
+  "selections": [
+    {"node": {"id": "app@1", "license_display": "Proprietary"},
+     "fixed": true, "selected_token": "Proprietary", "selected_category": "proprietary",
+     "status": "selected"},
+    {"node": {"id": "lib@1", "license_display": "MPL-2.0 OR GPL-2.0"},
+     "fixed": false, "selected_token": "MPL-2.0", "selected_category": "weak-copyleft",
+     "status": "selected", "reason": "该包声明了 2 个 OR/并列候选，按全图一致方案选定 MPL-2.0。"}
+  ],
+  "warning_relations": [
+    {"ancestor": "app@1", "node": "lib@1", "distance": 1,
+     "path": ["app@1", "lib@1"],
+     "ancestor_selected": "Proprietary", "node_selected": "MPL-2.0",
+     "status": "warning",
+     "reason": "MPL-2.0 属于文件/库级弱 copyleft：满足独立链接、可替换及源码提供义务时可被专有作品使用，静态合并则不兼容，需要人工确认链接方式。"}
+  ],
+  "hard_conflict_relations": [],
+  "undetermined_relations": []
+}
+```
+
+含未知许可证（如 `OFL-1.1`、缺失许可证）或未解析依赖时，对应包
+`selections[].status` 为 `unknown-license`、`selected_token` 为 `null`，
+关系进入 `undetermined_relations`，结论为 `undetermined`：
+
+```bash
+$ curl -s http://localhost:8000/api/audits/999/license-select
+{"detail":"审计记录不存在：999。全图许可证选定为只读操作，不会创建新审计。"}
+```
+
+审计不存在返回 `404`。分析为纯只读操作，不创建审计、不改动原审计结果
+与复核标记；原生 manifest 与 CycloneDX 审计均可直接使用。网页端在第 6 节
+选择审计后点击「求全图一致选择」即可查看结论、每包选择与三类关系清单。
 
 ### 审计复现包接口（导出 / 离线核验）
 
@@ -798,6 +901,7 @@ CycloneDX 导入的审计结果结构相同，另带 `"source_format": "cycloned
 │   ├── relicense.py   # 单包许可证替换预演：替换一个节点许可证后沿原图重算并配对（纯只读）
 │   ├── edgefix.py     # 未解析依赖补边预演：补一条边并移除所选未解析项后重算并配对（纯只读）
 │   ├── edgecut.py     # 最少断边分析：Edmonds-Karp 最大流/最小割，确定性断边集合（纯只读）
+│   ├── graphselect.py # 全图许可证选定：每包从 OR/并列候选固定选一，全可达关系回溯求一致选择（纯只读）
 │   ├── repro.py       # 审计复现包：稳定序列化摘要、导出打包与离线核验（纯只读）
 │   ├── reviews.py     # 复核标记：指纹计算、失效时间规范化、审计结果附着
 │   ├── licenses.py    # 许可证别名规范化与兼容矩阵
@@ -805,7 +909,7 @@ CycloneDX 导入的审计结果结构相同，另带 `"source_format": "cycloned
 ├── static/
 │   ├── index.html     # 单文件网页（无外部 CDN 依赖）
 │   └── examples/      # sample-manifest.json 与 sample-cyclonedx.json 两个内置示例
-├── tests/             # 轻量自测：python -m tests.test_analyzer / test_compare / test_reviews / test_cyclonedx / test_multi_license / test_retire / test_relicense / test_edgefix / test_edgecut / test_repro
+├── tests/             # 轻量自测：python -m tests.test_analyzer / test_compare / test_reviews / test_cyclonedx / test_multi_license / test_retire / test_relicense / test_edgefix / test_edgecut / test_graphselect / test_repro
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
