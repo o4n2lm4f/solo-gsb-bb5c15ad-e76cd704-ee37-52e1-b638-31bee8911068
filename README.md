@@ -46,7 +46,7 @@ manifest（或直接上传 **CycloneDX JSON** SBOM），系统会：
     展示新增及最短路径变化的冲突（附两侧路径）、剩余未解析项与冲突数净变化；
     引用或目标无效、补成自依赖或重复边返回明确错误（422）；预演为纯只读操作，
     **不创建审计、不改动复核标记**，原生 manifest 与 CycloneDX 审计均可使用。
-12. **最少断边分析** —— 在网页第 7 节选定一条已保存审计中的冲突或告警后（或调用
+12. **最少断边分析** —— 在网页第 8 节选定一条已保存审计中的冲突或告警后（或调用
     `GET /api/audits/{id}/edgecut/{conflict_id}`），沿审计保存的现有
     **使用方 → 被依赖方** 图，计算要让该条冲突的祖先包无法再到达被依赖包所需删除的
     **最少依赖边**（有向图 s-t 最小边割：单位容量 Edmonds-Karp 最大流 = 最小割）：
@@ -55,7 +55,20 @@ manifest（或直接上传 **CycloneDX JSON** SBOM），系统会：
     网页展示原最短路径、建议断边（标出落在原最短路径上的边）与断边后是否仍可达。
     审计或冲突/告警不存在时返回明确错误（404）；分析为纯只读操作，
     **不改动原审计结果与复核标记**，原生 manifest 与 CycloneDX 审计均可使用；
-13. **审计复现包（可离线转交）** —— 在网页第 2 节选择一条历史审计即可下载复现包
+13. **全图许可证选定** —— 在网页第 6 节选择一条已保存审计（或调用
+    `GET /api/audits/{id}/graphpick`），服务端对每个包从其现有
+    **OR / 并列许可证候选**中固定选定一个许可证（单许可证包保持原证），
+    沿 **使用方 → 被依赖方** 的**全部可达关系**（每个祖先到每个可达后代，
+    含传递关系与依赖环）逐一调用现有兼容矩阵，用确定性回溯（MRV + 前向校验）
+    求一份全图一致的选择：优先返回**所有关系均兼容**的方案；若只能避开硬冲突
+    （剩余矩阵 warning，如专有授权/链接方式）则标为**需人工确认**并列出告警关系；
+    若**任何选择都含硬冲突**则给出**无解**结论，并返回硬冲突最少的选择与无法避开的
+    硬冲突关系（附最短依赖路径）。**未知许可证（未声明/矩阵外/不可拆分表达式）与
+    未解析依赖一律明确标为「未判定」，不参与求解，也不会据此声称全图可行**。
+    接口同时提供只读 JSON，展示每包候选与最终选择、各关系结论与求解过程；
+    纯只读，**不创建审计、不改动原审计与复核标记**，原生 manifest 与 CycloneDX
+    审计均可使用；
+14. **审计复现包（可离线转交）** —— 在网页第 2 节选择一条历史审计即可下载复现包
     （或调用 `GET /api/audits/{id}/repro`）：从 SQLite 取出**原始 manifest** 与
     **未附着实时复核标记的保存结果**，导出含格式版本（`audit-repro/v1`）、审计名称
     及两者 **SHA-256 摘要**的单个 JSON 文件，可离线转交。上传该包核验
@@ -123,7 +136,7 @@ docker compose up --build          # 前台启动（加 -d 可后台运行）
 
 | 地址 | 说明 |
 | --- | --- |
-| <http://localhost:8000/> | 网页界面（已自动载入示例 manifest，可一键切换 CycloneDX 示例；第 2 节可对比两次历史审计、下载/上传核验审计复现包，第 3 节可做根包退役预演，第 4 节可做单包许可证替换预演，第 5 节可做未解析依赖补边预演，第 7 节可对单条冲突做最少断边分析） |
+| <http://localhost:8000/> | 网页界面（已自动载入示例 manifest，可一键切换 CycloneDX 示例；第 2 节可对比两次历史审计、下载/上传核验审计复现包，第 3 节可做根包退役预演，第 4 节可做单包许可证替换预演，第 5 节可做未解析依赖补边预演，第 6 节可做全图许可证选定，第 8 节可对单条冲突做最少断边分析） |
 | <http://localhost:8000/docs> | Swagger 风格交互式 JSON API 文档 |
 | <http://localhost:8000/redoc> | ReDoc API 文档 |
 | <http://localhost:8000/api/matrix> | 许可证兼容矩阵（机器可读） |
@@ -277,6 +290,7 @@ $ curl -s -X POST http://localhost:8000/api/audit -H "Content-Type: application/
 | GET | `/api/audits/{id}/retire?retire=a@1&retire=b@2` | **根包退役预演**（只读；不带参数返回根包列表） |
 | GET | `/api/audits/{id}/relicense?package=a@1&license=MIT` | **单包许可证替换预演**（只读；不带参数返回可选包与候选许可证列表） |
 | GET | `/api/audits/{id}/edgefix?source=a@1&reference=x@2&target=x@1` | **未解析依赖补边预演**（只读；不带参数返回源包仍存在的未解析引用与目标包列表） |
+| GET | `/api/audits/{id}/graphpick` | **全图许可证选定**（只读：每包从 OR/并列候选固定选一，沿全部可达关系求全图一致选择，返回三级结论与每包选择） |
 | GET | `/api/audits/{id}/edgecut/{conflict_id}` | **最少断边分析**（只读；返回让祖先包无法再到达被依赖包的确定性最少断边集合） |
 | GET | `/api/audits/{id}/repro` | **导出审计复现包**（原始 manifest + 保存结果 + 两者 SHA-256 摘要，可离线转交） |
 | POST | `/api/repro/verify` | **核验复现包**（JSON 请求体，只读：重算摘要 + 分析器复算逐项比对） |
@@ -390,7 +404,7 @@ curl http://localhost:8000/api/reviews/1                          # 单条记录
 curl -X POST http://localhost:8000/api/reviews/1/revoke           # 撤销（保留记录，条目回到待复核）
 ```
 
-网页端在第 5 节每条冲突卡片上直接展示「待复核 / 已复核」徽标：待复核条目可填写
+网页端在第 8 节每条冲突卡片上直接展示「待复核 / 已复核」徽标：待复核条目可填写
 复核备注与失效时间后一键打标，已复核条目显示备注、失效时间并提供「撤销标记」按钮，
 操作后列表自动刷新。删除审计记录不会删除复核标记（标记按指纹跨审计生效）。
 
@@ -545,6 +559,99 @@ HTTP/1.1 422 Unprocessable Entity
 已依赖的目标），点击「预演补边」即可查看净变化统计、新增及路径变化的冲突
 （含两侧最短路径）与剩余未解析项，可反复更换选择重新预演。
 
+### 全图许可证选定接口
+
+对一条已保存的审计，把每个包节点的许可证固定为一个选择：单许可证包只有矩阵内
+规范标识一个选择；声明了多个候选许可证的包（`"MIT OR GPL-2.0"` 这类纯 OR
+表达式，或 `["MIT", "Apache-2.0"]` 多个并列条目）从候选集合中选定一个。
+随后沿 **使用方 → 被依赖方** 的**全部可达关系**（每个祖先包到其每个可达后代，
+包含传递关系与依赖环；可达范围与分析器 BFS 完全一致）逐一调用现有兼容矩阵，
+用确定性回溯（MRV + 前向校验，候选与变量均按审计声明顺序决断，结果可复现）
+求一份全图一致的选择：
+
+```bash
+curl http://localhost:8000/api/audits/1/graphpick
+```
+
+三级结论（`conclusion`）：
+
+- `compatible`（全图兼容）——存在一份选择使**所有已判定关系均兼容**，
+  且图中不存在未知许可证或未解析依赖；
+- `needs_confirmation`（需人工确认）——存在一份选择可避开全部**硬冲突**，
+  但仍有关系为矩阵 `warning`（专有授权、动态链接方式等），**或**虽有全兼容
+  选择但图中含**未知许可证 / 未解析依赖**（此时不能声称全图可行）；
+  返回该选择，并在 `relations.warnings` / `relations.undetermined` 中列出
+  每条告警与未判定关系（附最短依赖路径）；
+- `unsolvable`（无解）——**任何选择都至少含一条硬冲突**：明确给出无解结论，
+  并返回硬冲突数最少的选择及无法避开的硬冲突关系（`relations.hard_conflicts`，
+  附双方选定许可证、矩阵理由与最短依赖路径），仅供定位冲突。
+
+**未判定（undetermined）规则**：许可证未声明、不在矩阵中或表达式无法拆分
+（含 `AND`/括号/未知标识）的包不参与求解，`selections[]` 中 `undetermined=true`、
+`selected_license=null` 并给出原因；所有涉及该包的可达关系状态为 `undetermined`。
+审计中的未解析依赖（目标包缺失）无法纳入可达关系，原样列入 `unresolved` 并计数。
+只要存在任何未判定因素，结论最多为 `needs_confirmation`，**绝不返回
+`compatible`**。
+
+返回内容（节选）：
+
+- `conclusion` / `conclusion_label` —— 三级结论及中文标签；
+- `summary` —— 包数、多候选包数、已选定/未判定包数、可达关系数（直接/传递）、
+  兼容/告警/硬冲突/未判定关系数与未解析依赖数；
+- `selections` —— **每包选择**：候选许可证（声明顺序）、最终选定
+  `selected_license`、`selected_from`（`single` 唯一选择 / `candidate` 多候选
+  中选定 / `undetermined`）、是否多候选及未判定原因；
+- `relations` —— 按结论分组的全部可达关系：`ok` / `warnings` /
+  `hard_conflicts` / `undetermined`，每条含双方许可证、矩阵逐条理由、
+  最短跳数、是否直接依赖与最短依赖路径；
+- `unresolved` —— 原审计的未解析依赖（未判定因素）；
+- `warnings` —— 中文结论说明与未判定/搜索截断提示；
+- `search` —— 分阶段求解记录（全兼容 → 避开硬冲突 → 最少硬冲突）、
+  各阶段展开节点数与搜索预算；分支过多导致预算耗尽时 `truncated=true`
+  并明确提示结论可能不精确，不臆造最优性。
+
+```json
+{
+  "kind": "graph-wide-license-selection",
+  "read_only": true,
+  "conclusion": "compatible",
+  "conclusion_label": "全图兼容",
+  "summary": {"packages": 2, "multi_license_packages": 1, "decided_packages": 2,
+              "undetermined_packages": 0, "reachable_relations": 1,
+              "direct_relations": 1, "transitive_relations": 0,
+              "ok_relations": 1, "warning_relations": 0,
+              "hard_conflict_relations": 0, "undetermined_relations": 0,
+              "unresolved_dependencies": 0},
+  "selections": [
+    {"id": "app@1.0.0", "name": "app", "version": "1.0.0",
+     "license_display": "GPL-2.0 OR MIT", "license_multi": true,
+     "candidates": ["GPL-2.0", "MIT"], "selected_license": "MIT",
+     "selected_from": "candidate", "fixed": false,
+     "undetermined": false, "undetermined_reason": null}
+  ],
+  "relations": {"ok": [{"ancestor": "app@1.0.0", "node": "lib@1.0.0",
+                 "ancestor_license": "MIT", "node_license": "Apache-2.0",
+                 "status": "ok", "distance": 1, "direct": true,
+                 "shortest_path": ["app@1.0.0", "lib@1.0.0"]}],
+                "warnings": [], "hard_conflicts": [], "undetermined": []},
+  "unresolved": [],
+  "warnings": []
+}
+```
+
+审计不存在返回 `404`：
+
+```bash
+$ curl -i http://localhost:8000/api/audits/999/graphpick
+HTTP/1.1 404 Not Found
+{"detail":"审计记录不存在：999。全图许可证选定为只读操作，不会创建新审计。"}
+```
+
+选定是**只读**操作，不会创建审计或改动复核标记；原生 manifest 与 CycloneDX
+审计结果均可直接使用。网页端在第 6 节选择审计后点击按钮即可：页面展示结论徽标、
+关系统计、**每包候选与最终选择表**、硬冲突/告警/未判定关系卡片（含最短路径）、
+未解析依赖与可折叠的求解过程，并提供指向只读 JSON API 的链接。
+
 ### 最少断边分析接口
 
 对一条已保存审计中的冲突/告警（祖先包 `ancestor` 沿依赖边约束到被依赖包
@@ -624,7 +731,7 @@ HTTP/1.1 404 Not Found
 {"detail":"审计 #1 中不存在冲突/告警条目：C999。"}
 ```
 
-网页端在第 7 节每条冲突/告警卡片上点击「✂ 最少断边分析」即可：
+网页端在第 8 节每条冲突/告警卡片上点击「✂ 最少断边分析」即可：
 页面展示原最短路径（落在上面的建议断边以红色波浪线标出）、建议删除边清单
 （区分原最短路径上的边与并行/汇合路径上的边）、边不相交见证路径（折叠区）
 以及断边后是否仍可达的徽标与残留路径；可对任意条目反复分析，
@@ -790,13 +897,14 @@ CycloneDX 导入的审计结果结构相同，另带 `"source_format": "cycloned
 ```
 .
 ├── app/
-│   ├── main.py        # FastAPI 路由（JSON API + 网页，含对比/复核/预演/最少断边/复现包接口）
+│   ├── main.py        # FastAPI 路由（JSON API + 网页，含对比/复核/预演/全图选定/最少断边/复现包接口）
 │   ├── analyzer.py    # manifest 解析、节点规范化、传递约束、最短路径（自动路由 CycloneDX）
 │   ├── cyclonedx.py   # CycloneDX JSON 导入：bom-ref 映射节点、ref/dependsOn 还原依赖边
 │   ├── compare.py     # 两次审计对比：节点/冲突配对与变化检测（纯只读）
 │   ├── retire.py      # 根包退役预演：从剩余根包重算可达集合（纯只读）
 │   ├── relicense.py   # 单包许可证替换预演：替换一个节点许可证后沿原图重算并配对（纯只读）
 │   ├── edgefix.py     # 未解析依赖补边预演：补一条边并移除所选未解析项后重算并配对（纯只读）
+│   ├── graphpick.py   # 全图许可证选定：每包 OR/并列候选固定选一，全可达关系回溯求一致选择（纯只读）
 │   ├── edgecut.py     # 最少断边分析：Edmonds-Karp 最大流/最小割，确定性断边集合（纯只读）
 │   ├── repro.py       # 审计复现包：稳定序列化摘要、导出打包与离线核验（纯只读）
 │   ├── reviews.py     # 复核标记：指纹计算、失效时间规范化、审计结果附着
@@ -805,7 +913,7 @@ CycloneDX 导入的审计结果结构相同，另带 `"source_format": "cycloned
 ├── static/
 │   ├── index.html     # 单文件网页（无外部 CDN 依赖）
 │   └── examples/      # sample-manifest.json 与 sample-cyclonedx.json 两个内置示例
-├── tests/             # 轻量自测：python -m tests.test_analyzer / test_compare / test_reviews / test_cyclonedx / test_multi_license / test_retire / test_relicense / test_edgefix / test_edgecut / test_repro
+├── tests/             # 轻量自测：python -m tests.test_analyzer / test_compare / test_reviews / test_cyclonedx / test_multi_license / test_retire / test_relicense / test_edgefix / test_graphpick / test_edgecut / test_repro
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
